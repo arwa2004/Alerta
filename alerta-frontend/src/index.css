@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #F4F6F8;
+  --card: #FFFFFF;
+  --text: #0B1F3A;
+  --sub: #4A5568;
+  --border: #D8DEE4;
+  --line: #E7EBEF;
+  --navy: #0B1F3A;
+  --navy-2: #16345C;
+  --cyan: #00C2CB;
+  --cyan-d: #00838F;
+  --cyan-l: #E4F8F9;
+  --red: #E63946;
+  --green: #2BB673;
+  --amber: #F4A261;
+  --sh: 0 1px 2px rgba(11, 31, 58, 0.06);
+  --r: 10px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+}
+
+/* ---------- Classes du template officiel Alerta ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--sh);
+}
+
+.card-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.card-h h3 {
+  font-size: 14.5px;
+  margin: 0;
+}
+
+.card-b {
+  padding: 16px;
+}
+
+.grid-template {
+  display: grid;
+  gap: 14px;
+}
+
+.g3 {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.g2 {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* Boutons */
+.btn-alerta {
+  font: 500 13.5px 'Inter', sans-serif;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.15s ease-in-out;
+}
+
+.b-pri {
+  background: var(--cyan-d);
+  color: #fff;
+}
+.b-pri:hover {
+  background: #006972;
+}
+
+.b-gho {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--text);
+}
+.b-gho:hover {
+  background: #f1f3f5;
+}
+
+/* Badges */
+.bd {
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.b-ok {
+  background: rgba(43, 182, 115, 0.14);
+  color: #1D8A57;
+}
+
+.b-ko {
+  background: rgba(230, 57, 70, 0.13);
+  color: #C22B36;
+}
+
+.b-in {
+  background: rgba(244, 162, 97, 0.16);
+  color: #B4702F;
+}
+
+.b-ia {
+  background: var(--cyan-l);
+  color: var(--cyan-d);
+}
+
+/* Formulaires */
+.fld {
+  margin-bottom: 14px;
+}
+
+.lb {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.inp {
+  width: 100%;
+  font: 400 13.5px 'Inter', sans-serif;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.inp:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0, 194, 203, 0.2);
+}
+
+/* Statistiques */
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 16px;
+}
+
+.stat .ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--cyan-l);
+  color: var(--cyan-d);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.stat b {
+  display: block;
+  font-family: 'Poppins', sans-serif;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.stat span {
+  font-size: 12px;
+  color: var(--sub);
+}
+
+/* Avatar */
+.av {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--cyan-d);
+}
