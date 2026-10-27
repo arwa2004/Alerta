@@ -33,9 +33,11 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
+    'django_filters',
 
     # Modules Alerta
     'users',
+    'events',
 ]
 
 MIDDLEWARE = [
@@ -124,6 +126,15 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Email backend (console pour développement & tests, imprimé dans le terminal)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'Alerta Security <noreply@alerta.tn>'
+
+# ─── Clés API IA ──────────────────────────────────────────────────────────────
+# Pour activer Gemini : aller sur https://aistudio.google.com/app/apikey
+# Copier la clé et remplacer la chaîne ci-dessous (ou définir la variable d'env GEMINI_API_KEY)
+GEMINI_API_KEY = 'VOTRE_CLE_GEMINI_ICI'
+
+# Pour activer Hugging Face : aller sur https://huggingface.co/settings/tokens
+# Créer un token "Read" et le coller ci-dessous (ou définir HUGGINGFACE_API_KEY)
+HUGGINGFACE_API_KEY = 'VOTRE_CLE_HUGGINGFACE_ICI'
 
 # Configuration SimpleJWT
 SIMPLE_JWT = {

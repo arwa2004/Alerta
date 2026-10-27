@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import UserSettings from '../components/UserSettings';
 
 export default function AdminDashboard({
@@ -25,6 +26,7 @@ export default function AdminDashboard({
 }) {
   const [activeAdminNav, setActiveAdminNav] = useState('overview'); // 'overview' | 'users' | 'settings'
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const navigate = useNavigate();
 
   const currentDate = new Date().toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -116,7 +118,7 @@ export default function AdminDashboard({
             </nav>
           </div>
 
-          {/* Groupe 2 : Modules Alerta (À venir) */}
+          {/* Groupe 2 : Modules Alerta */}
           <div>
             <p className="px-3 text-[11px] font-bold text-[#8FA3B8] uppercase tracking-wider mb-2">
               Modules Équipe
@@ -124,26 +126,40 @@ export default function AdminDashboard({
             <nav className="space-y-1 text-sm">
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
                 <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                  Événements
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  Zones &amp; Visages
                 </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M2</span>
+                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400 font-bold">M1</span>
               </div>
 
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
                 <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  Visages &amp; Personnes
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  Médias &amp; Vidéos
                 </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M3</span>
+                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400 font-bold">M2</span>
               </div>
+
+              {/* M3 — Actif et interactif ! */}
+              <button
+                onClick={() => navigate('/events')}
+                className="w-full flex items-center justify-between px-3.5 py-2 text-cyan-600 bg-cyan-50/60 hover:bg-cyan-100/80 rounded-lg transition text-left font-semibold cursor-pointer"
+              >
+                <span className="flex items-center gap-3">
+                  <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Événements &amp; IA
+                </span>
+                <span className="text-[10px] bg-cyan-200 text-cyan-800 px-1.5 py-0.5 rounded font-bold">M3</span>
+              </button>
 
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
                 <span className="flex items-center gap-3">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7" /></svg>
-                  Commandes Vocales
+                  Voix &amp; Alarmes
                 </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M4</span>
+                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400 font-bold">M4</span>
               </div>
             </nav>
           </div>
