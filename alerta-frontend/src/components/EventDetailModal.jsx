@@ -80,6 +80,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     : null;
 
   const isHfImage = event.image_source === 'hf';
+  const isOpenAiImage = event.image_source === 'ia_ouverte';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -127,8 +128,12 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
 
             {/* Bandeau d'information Reconstitution */}
             <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono border flex items-center gap-2 border-cyan-500/40 text-cyan-300">
-              <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : 'bg-amber-400'}`}></span>
-              {isHfImage ? 'Reconstitution IA (Hugging Face)' : 'Reconstitution de la scène (Simulation)'}
+              <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+              {isHfImage
+                ? 'Reconstitution IA (Hugging Face)'
+                : isOpenAiImage
+                ? 'Reconstitution IA (Moteur FLUX.1)'
+                : 'Reconstitution de la scène (Simulation)'}
             </div>
 
             <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
@@ -250,6 +255,8 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
               <span className="font-semibold text-xs flex items-center gap-1.5">
                 {isHfImage ? (
                   <span className="text-cyan-400 font-bold">Hugging Face (Inference)</span>
+                ) : isOpenAiImage ? (
+                  <span className="text-emerald-400 font-bold">IA Générative (Moteur FLUX.1)</span>
                 ) : (
                   <span className="text-amber-400 font-medium">Reconstitution Simulation</span>
                 )}

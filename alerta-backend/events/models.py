@@ -111,12 +111,13 @@ class Evenement(models.Model):
     )
 
     IMAGE_SOURCE_CHOICES = [
-        ('hf', 'Hugging Face (IA)'),
+        ('hf', 'Hugging Face (FLUX.1)'),
+        ('ia_ouverte', 'IA Générative Ouverte (FLUX.1)'),
         ('simulation', 'Simulation locale'),
     ]
 
     image_source = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=IMAGE_SOURCE_CHOICES,
         default='simulation',
         verbose_name="Origine de l'image"

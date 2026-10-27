@@ -112,9 +112,10 @@ def creer_evenement(
         statut_ia='ok'
     )
 
-    # 4. Reconstitution visuelle par IA (Hugging Face ou fallback simulation)
+    # 4. Reconstitution visuelle par IA (Hugging Face, IA ouverte FLUX.1 ou simulation)
     try:
         AlertaAIService.generer_image_reconstitution(evenement)
+        evenement.refresh_from_db()
     except Exception as e:
         print(f"[Erreur Reconstitution Image] {e}")
 

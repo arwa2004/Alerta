@@ -140,32 +140,54 @@ class AlertaAIService:
             f"low light, grainy, {evenement.description or evenement.type}"
         )
 
+        # 1. Tentative Hugging Face (text-to-image avec InferenceClient)
         if hf_token and InferenceClient is not None:
-            models_to_try = [
-                "black-forest-labs/FLUX.1-schnell",
-                "stabilityai/stable-diffusion-xl-base-1.0",
-                "runwayml/stable-diffusion-v1-5"
-            ]
-            for model_name in models_to_try:
-                try:
-                    client = InferenceClient(token=hf_token)
-                    img = client.text_to_image(prompt, model=model_name)
-                    buf = BytesIO()
-                    img.save(buf, format="JPEG")
-                    evenement.image_reconstituee.save(
-                        f"hf_{evenement.id}.jpg",
-                        ContentFile(buf.getvalue()),
-                        save=False
-                    )
-                    evenement.image_source = "hf"
-                    evenement.save(update_fields=['image_reconstituee', 'image_source'])
-                    print(f"[Hugging Face] Image generee avec {model_name} (image_source=hf)")
-                    return
-                except Exception as e:
-                    print(f"[Hugging Face {model_name}] {e}")
+            try:
+                client = InferenceClient(token=hf_token)
+                img = client.text_to_image(prompt, model="black-forest-labs/FLUX.1-schnell")
+                buf = BytesIO()
+                img.save(buf, format="JPEG")
+                evenement.image_reconstituee.save(
+                    f"hf_{evenement.id}.jpg",
+                    ContentFile(buf.getvalue()),
+                    save=False
+                )
+                evenement.image_source = "hf"
+                evenement.save(update_fields=['image_reconstituee', 'image_source'])
+                print("[Hugging Face] Image generee avec FLUX.1-schnell (image_source=hf)")
+                return
+            except Exception as e:
+                print(f"[Hugging Face Indisponible/402 -> Bascule vers Alternative Ouverte]")
 
-        # Fallback Simulation locale
-        print("[Reconstitution] Génération du rendu de simulation visuelle (image_source=simulation)")
+        # 2. Alternative gratuite ouverte (Modèle FLUX.1 via cluster ouvert Pollinations)
+        try:
+            import urllib.parse
+            en_type = {
+                'inconnu': 'intruder suspicious person trespassing',
+                'visage_inconnu': 'intruder suspicious person trespassing',
+                'visage_connu': 'authorized resident person walking inside',
+                'mouvement': 'motion shadow movement detected',
+            }.get(evenement.type, 'security surveillance anomaly')
+            prompt_en = f"CCTV security camera still frame, {zone_nom}, night, low light, grainy, {en_type}"
+            prompt_clean = prompt_en.encode('ascii', 'ignore').decode('ascii')
+            url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_clean)}"
+            params = {"width": 640, "height": 360, "nologo": "true", "seed": random.randint(100, 999999)}
+            res = requests.get(url_pollinations, params=params, timeout=25)
+            if res.status_code == 200 and len(res.content) > 3000:
+                evenement.image_reconstituee.save(
+                    f"flux_{evenement.id}.jpg",
+                    ContentFile(res.content),
+                    save=False
+                )
+                evenement.image_source = "ia_ouverte"
+                evenement.save(update_fields=['image_reconstituee', 'image_source'])
+                print("[IA Generative Ouverte] Vraie image FLUX.1 generee avec succes (image_source=ia_ouverte)")
+                return
+        except Exception as e:
+            print(f"[IA Ouverte Pollinations non disponible: {e}]")
+
+        # 3. Fallback Simulation locale de secours (hors ligne)
+        print("[Reconstitution] Generation du rendu de simulation locale (image_source=simulation)")
         cls.generer_rendu_simulation(evenement)
         evenement.image_source = "simulation"
         evenement.save(update_fields=['image_reconstituee', 'image_source'])
