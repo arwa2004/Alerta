@@ -77,10 +77,10 @@ class AlertaAIService:
                 else:
                     print(f"[Gemini AI] Erreur HTTP {res.status_code}: {res.text[:200]}")
             except Exception as e:
-                print(f"[Gemini AI] Exception ({type(e).__name__}: {e}) → Bascule contextuelle.")
+                print(f"[Gemini AI] Exception ({type(e).__name__}: {e}) -> Bascule contextuelle.")
 
-        # ── Fallback contextuel MOCK_AI ───────────────────────────────────────
-        print("[Gemini AI] Aucune clé ou quota dépassé → Générateur contextuel activé.")
+        # -- Fallback contextuel MOCK_AI ---------------------------------------
+        print("[Gemini AI] Aucune cle ou quota depasse -> Generateur contextuel active.")
         return cls._mock_description(event_type, zone_nom, heure_str, personne_nom, score_confiance)
 
     @classmethod
@@ -154,8 +154,8 @@ class AlertaAIService:
                 except Exception as e:
                     print(f"[Hugging Face] Exception ({model_url_name}): {e}")
 
-        # ── Fallback : image CCTV synthétique Pillow ──────────────────────────
-        print("[Hugging Face] Aucune clé ou échec → Image CCTV synthétique Alerta générée.")
+        # -- Fallback : image CCTV synthetique Pillow --------------------------
+        print("[Hugging Face] Aucune cle ou echec -> Image CCTV synthetique Alerta generee.")
         return cls._generate_cctv_synthetic_image(event_type, zone_nom, description, personne_nom)
 
     @classmethod
