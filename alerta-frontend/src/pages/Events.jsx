@@ -250,7 +250,7 @@ export default function Events() {
                     <th className="py-4 px-6">Type</th>
                     <th className="py-4 px-6">Zone</th>
                     <th className="py-4 px-6">Description (Gemini)</th>
-                    <th className="py-4 px-6">Criticité (ML)</th>
+                    <th className="py-4 px-6">Criticité</th>
                     <th className="py-4 px-6">Date & Heure</th>
                     <th className="py-4 px-6 text-right">Actions</th>
                   </tr>

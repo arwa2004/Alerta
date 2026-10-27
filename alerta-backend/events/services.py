@@ -1,7 +1,6 @@
 from datetime import timedelta
 from django.utils import timezone
 from .models import Evenement, Zone
-from .ml.predictor import predictor
 from .ai import AlertaAIService
 
 
@@ -12,6 +11,33 @@ def declencher_alerte_module_4(evenement, gravite):
     """
     print(f"[ALERTE MODULE 4 DECLENCHEE] Gravité: {gravite.upper()} | Événement ID #{evenement.id} - {evenement}")
     return True
+
+
+def evaluer_criticite(type_event, score_confiance=0.85):
+    """
+    Évaluation déterministe et transparente du niveau de risque :
+    - Inconnu : Criticité élevée (0.85) -> déclenche l'alarme Module 4
+    - Mouvement : Criticité moyenne (0.50) -> vigilance
+    - Visage connu : Criticité faible (0.15) -> accès normal autorisé
+    """
+    if type_event in ['inconnu', 'visage_inconnu']:
+        return {
+            'score_criticite': 0.85,
+            'niveau_criticite': 'eleve',
+            'alerte_declenchee': True,
+        }
+    elif type_event == 'mouvement':
+        return {
+            'score_criticite': 0.50,
+            'niveau_criticite': 'moyen',
+            'alerte_declenchee': False,
+        }
+    else:  # visage_connu
+        return {
+            'score_criticite': 0.15,
+            'niveau_criticite': 'faible',
+            'alerte_declenchee': False,
+        }
 
 
 def analyser_evenement_gemini(evenement):
@@ -47,41 +73,20 @@ def creer_evenement(
 ):
     """
     Point d'entrée de service pour le Module 2 (Médias & Vidéos) et pour l'API.
-    Traite la détection, calcule le score de criticité ML, reconstitue la scène via Hugging Face et persiste l'événement.
+    Traite la détection, évalue la gravité, reconstitue la scène via Hugging Face et persiste l'événement.
     """
     if date_heure is None:
         date_heure = timezone.now()
 
     zone_nom = zone.nom if zone else zone_nom_fallback
 
-    # 1. Calcul du nombre d'événements récents dans la zone (dernière heure)
-    une_heure_avant = date_heure - timedelta(hours=1)
-    if zone:
-        recent_count = Evenement.objects.filter(
-            user=user,
-            zone=zone,
-            date_heure__gte=une_heure_avant
-        ).count()
-    else:
-        recent_count = Evenement.objects.filter(
-            user=user,
-            zone_nom_fallback=zone_nom_fallback,
-            date_heure__gte=une_heure_avant
-        ).count()
+    # 1. Évaluation de la gravité
+    evaluation = evaluer_criticite(type_event, score_confiance)
+    score_criticite = evaluation['score_criticite']
+    niveau_criticite = evaluation['niveau_criticite']
+    declencher_alerte = evaluation['alerte_declenchee']
 
-    # 2. Calcul du score de criticité par Machine Learning (scikit-learn)
-    event_data_for_ml = {
-        'date_heure': date_heure,
-        'type': type_event,
-        'personne_nom': personne_nom,
-        'score_confiance': score_confiance,
-    }
-    ml_result = predictor.predict(event_data_for_ml, recent_events_count=recent_count)
-    score_criticite = ml_result['score_criticite']
-    niveau_criticite = ml_result['niveau_criticite']
-    declencher_alerte = ml_result['alerte_declenchee']
-
-    # 3. Description initiale (l'analyse complète Gemini se fait ensuite via le bouton)
+    # 2. Description initiale (l'analyse complète Gemini se fait ensuite via le bouton)
     heure_str = date_heure.strftime('%H:%M:%S')
     description = AlertaAIService.generate_initial_description(
         event_type=type_event,
@@ -90,7 +95,7 @@ def creer_evenement(
         personne_nom=personne_nom
     )
 
-    # 4. Création de l'événement en base de données
+    # 3. Création de l'événement en base de données
     evenement = Evenement.objects.create(
         user=user,
         zone=zone,
@@ -107,14 +112,14 @@ def creer_evenement(
         statut_ia='ok'
     )
 
-    # 5. Reconstitution visuelle par IA (Hugging Face ou fallback simulation)
+    # 4. Reconstitution visuelle par IA (Hugging Face ou fallback simulation)
     try:
         AlertaAIService.generer_image_reconstitution(evenement)
     except Exception as e:
         print(f"[Erreur Reconstitution Image] {e}")
 
-    # 6. Déclenchement de l'alerte pour le Module 4 si nécessaire
-    if declencher_alerte or niveau_criticite in ['critique', 'elevee']:
+    # 5. Déclenchement de l'alerte pour le Module 4 si nécessaire
+    if declencher_alerte or niveau_criticite in ['critique', 'eleve']:
         declencher_alerte_module_4(evenement, niveau_criticite)
 
     return evenement

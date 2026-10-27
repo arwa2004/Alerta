@@ -207,10 +207,10 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Jauge du Score de Criticité ML */}
+          {/* Jauge du Score de Criticité */}
           <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-slate-400">Évaluation Criticité (Machine Learning Random Forest)</span>
+              <span className="text-xs font-medium text-slate-400">Niveau de Risque & Gravité</span>
               <span className={`text-sm font-bold ${critInfo.color}`}>
                 {critInfo.label} — {Math.round(event.score_criticite * 100)}%
               </span>

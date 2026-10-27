@@ -6,8 +6,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from .models import Evenement, Zone
-from .services import creer_evenement
-from .ml.predictor import predictor
+from .services import creer_evenement, evaluer_criticite
 
 User = get_user_model()
 
@@ -48,30 +47,18 @@ class EvenementsModuleTestCase(TestCase):
             user=self.user1
         )
 
-    def test_ml_criticite_predictor(self):
+    def test_evaluation_criticite(self):
         """
-        Teste les règles intelligentes du modèle de criticité ML :
-        - Inconnu la nuit à 02h00 -> Criticité ÉLEVÉE (>= 0.70) et alerte déclenchée
-        - Visage connu à 14h00 -> Criticité FAIBLE (< 0.35)
+        Teste les règles d'évaluation du niveau de criticité :
+        - Inconnu -> Criticité ÉLEVÉE (>= 0.70) et alerte déclenchée
+        - Visage connu -> Criticité FAIBLE (< 0.35)
         """
-        nuit_date = timezone.now().replace(hour=2, minute=30)
-        res_critique = predictor.predict({
-            'date_heure': nuit_date,
-            'type': 'inconnu',
-            'personne_nom': '',
-            'score_confiance': 0.85,
-        })
+        res_critique = evaluer_criticite('inconnu', 0.85)
         self.assertGreaterEqual(res_critique['score_criticite'], 0.70)
         self.assertEqual(res_critique['niveau_criticite'], 'eleve')
         self.assertTrue(res_critique['alerte_declenchee'])
 
-        jour_date = timezone.now().replace(hour=14, minute=0)
-        res_faible = predictor.predict({
-            'date_heure': jour_date,
-            'type': 'visage_connu',
-            'personne_nom': 'Arwa',
-            'score_confiance': 0.95,
-        })
+        res_faible = evaluer_criticite('visage_connu', 0.95)
         self.assertLess(res_faible['score_criticite'], 0.35)
         self.assertEqual(res_faible['niveau_criticite'], 'faible')
         self.assertFalse(res_faible['alerte_declenchee'])
