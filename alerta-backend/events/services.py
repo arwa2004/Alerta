@@ -86,12 +86,15 @@ def creer_evenement(
     niveau_criticite = evaluation['niveau_criticite']
     declencher_alerte = evaluation['alerte_declenchee']
 
-    # 2. Description initiale (l'analyse complète Gemini se fait ensuite via le bouton)
+    # 2. Description experte IA générée dès la création (utilisée aussi pour le prompt image)
+    # Gemini enrichit la description à la demande via le bouton, mais la base est déjà une analyse complète.
     heure_str = date_heure.strftime('%H:%M:%S')
-    description = AlertaAIService.generate_initial_description(
+    description = AlertaAIService.generer_description_experte(
         event_type=type_event,
         zone_nom=zone_nom,
         heure_str=heure_str,
+        score_criticite=niveau_criticite,
+        score_confiance=score_confiance,
         personne_nom=personne_nom
     )
 
