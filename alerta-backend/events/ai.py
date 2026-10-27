@@ -94,12 +94,12 @@ class AlertaAIService:
             except Exception as e:
                 print(f"[Gemini Content] Exception: {e}")
 
-        # 3. Fallback Expert Contextuel Alerta
-        print("[Gemini AI] Utilisation du moteur d'analyse contextuelle Alerta Security.")
-        return cls._generate_expert_security_analysis(event_type, zone_nom, heure_str, score_criticite, conf_pct, personne_nom)
+        # 3. Fallback : description de scène contextuelle sans API
+        print("[Gemini AI] Utilisation du moteur de description de scene Alerta.")
+        return cls._generate_scene_description(event_type, zone_nom, heure_str, personne_nom)
 
     @classmethod
-    def _generate_expert_security_analysis(cls, event_type, zone_nom, heure_str, score_criticite, conf_pct, personne_nom):
+    def _generate_scene_description(cls, event_type, zone_nom, heure_str, personne_nom):
         """
         Fallback sans API : génère une description de scène réaliste et contextuelle.
         Focalisée sur CE QUI SE PASSE dans la scène, sans termes techniques.
@@ -134,20 +134,16 @@ class AlertaAIService:
             return f"Mouvement suspect détecté dans la zone {zone_nom} à {heure_str}."
 
     @classmethod
-    def generer_description_experte(cls, event_type, zone_nom, heure_str, score_criticite,
-                                     score_confiance, personne_nom=None):
+    def generer_description_experte(cls, event_type, zone_nom, heure_str, score_criticite=None,
+                                     score_confiance=None, personne_nom=None):
         """
-        Génère dès la création une description IA experte complète (sans appel API externe).
-        C'est CETTE description qui sert de base au prompt de génération d'image.
-        Le bouton Gemini peut ensuite l'enrichir encore davantage.
+        Génère une description de scène réaliste (sans appel API externe).
+        Utilisable comme fallback ou pour pré-remplir la description.
         """
-        conf_pct = int((score_confiance or 0.85) * 100)
-        return cls._generate_expert_security_analysis(
+        return cls._generate_scene_description(
             event_type=event_type,
             zone_nom=zone_nom,
             heure_str=heure_str,
-            score_criticite=score_criticite or 'moyen',
-            conf_pct=conf_pct,
             personne_nom=personne_nom or None
         )
 
