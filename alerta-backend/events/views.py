@@ -188,13 +188,13 @@ class EvenementGenererImageView(APIView):
 
         self.check_object_permissions(request, evenement)
 
-        try:
-            AlertaAIService.generer_image_reconstitution(evenement)
-            evenement.refresh_from_db()
-        except Exception as e:
-            return Response({'detail': f'Erreur génération image : {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        success, message = AlertaAIService.generer_image_reconstitution(evenement)
+        evenement.refresh_from_db()
 
-        return Response(EvenementSerializer(evenement, context={'request': request}).data)
+        data = EvenementSerializer(evenement, context={'request': request}).data
+        data['ia_success'] = success
+        data['ia_message'] = message
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class DashboardStatsView(APIView):

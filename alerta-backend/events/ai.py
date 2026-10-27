@@ -193,11 +193,12 @@ class AlertaAIService:
                 evenement.image_source = "hf"
                 evenement.save(update_fields=['image_reconstituee', 'image_source'])
                 print("[Hugging Face] Image generee depuis description IA (image_source=hf)")
-                return
+                return True, "Image générée avec succès via Hugging Face."
             except Exception as e:
-                print(f"[Hugging Face 402/Indisponible -> Bascule vers Pollinations FLUX.1]")
+                print("[Hugging Face 402/Indisponible -> Bascule vers Pollinations FLUX.1]")
 
-        # 2. Alternative gratuite Pollinations — même prompt construit depuis la description IA
+        # 2. Alternative gratuite Pollinations — prompt construit depuis la description IA
+        pollinations_error = None
         try:
             import urllib.parse
             url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_image_safe)}"
@@ -212,15 +213,27 @@ class AlertaAIService:
                 evenement.image_source = "ia_ouverte"
                 evenement.save(update_fields=['image_reconstituee', 'image_source'])
                 print("[IA Generative Ouverte] Image FLUX.1 generee depuis description IA (image_source=ia_ouverte)")
-                return
+                return True, "Image générée avec succès par l'IA (Moteur FLUX.1)."
+            elif res.status_code == 402:
+                pollinations_error = "Limite gratuite temporaire atteinte (1 image / 45s). Votre image actuelle est conservée, réessayez dans quelques secondes."
+                print(f"[Pollinations Rate Limit 402] {pollinations_error}")
+            else:
+                pollinations_error = f"Le service d'image IA est momentanément indisponible (Code {res.status_code})."
         except Exception as e:
+            pollinations_error = f"Erreur de connexion au service d'image : {e}"
             print(f"[IA Ouverte Pollinations non disponible: {e}]")
 
-        # 3. Fallback Simulation locale (hors ligne)
+        # 3. Si HF et Pollinations échouent mais qu'une image IA existait déjà : on la GARDE intacte !
+        if evenement.image_source in ('hf', 'ia_ouverte') and evenement.image_reconstituee:
+            print("[IA Image] Echec de regeneration, image IA existante conservee.")
+            return False, pollinations_error or "Génération indisponible. L'image IA précédente est conservée."
+
+        # 4. Fallback Simulation locale (uniquement si aucune image n'existait encore)
         print("[Reconstitution] Generation du rendu de simulation locale (image_source=simulation)")
         cls.generer_rendu_simulation(evenement)
         evenement.image_source = "simulation"
         evenement.save(update_fields=['image_reconstituee', 'image_source'])
+        return True, "Rendu de simulation synthétique généré."
 
     @classmethod
     def generer_rendu_simulation(cls, evenement):

@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import eventsApi from '../api/eventsApi';
 
 export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   if (!event) return null;
 
+  const isDetailedDesc = event.description && (
+    event.description.includes('caméra') ||
+    event.description.includes('silhouette') ||
+    event.description.includes('capturé') ||
+    event.description.includes('passage') ||
+    event.description.length > 70
+  );
+
   const [description, setDescription] = useState(event.description || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(false);
+  const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(Boolean(isDetailedDesc));
+  const [cooldown, setCooldown] = useState(0);
   const [currentImageUrl, setCurrentImageUrl] = useState(
     event.image_reconstituee
       ? (event.image_reconstituee.startsWith('http')
@@ -17,6 +26,15 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   );
   const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Gestionnaire de décompte pour le quota gratuit Pollinations (45s)
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const getTypeBadge = (type) => {
     switch (type) {
@@ -78,6 +96,13 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     setErrorMsg('');
     try {
       const updated = await eventsApi.genererImage(event.id);
+      if (updated.ia_success === false) {
+        // En cas de rate-limit (402), avertir l'utilisateur sans écraser l'image
+        setErrorMsg(updated.ia_message || "Limite temporaire atteinte. Votre image actuelle est conservée.");
+        setCooldown(30);
+        return;
+      }
+
       if (updated.image_reconstituee) {
         const url = updated.image_reconstituee.startsWith('http')
           ? updated.image_reconstituee
@@ -85,10 +110,11 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         setCurrentImageUrl(url + '?t=' + Date.now());
       }
       setCurrentImageSource(updated.image_source || 'ia_ouverte');
+      setCooldown(45); // Cooldown de 45s imposé par le niveau gratuit
       if (onEventUpdated) onEventUpdated(updated);
     } catch (err) {
       console.error('Erreur génération image', err);
-      setErrorMsg("Erreur lors de la génération de l'image. Réessayez.");
+      setErrorMsg("Erreur lors de la génération. L'image précédente est conservée.");
     } finally {
       setIsGeneratingImage(false);
     }
@@ -237,21 +263,39 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
 
               {/* BOUTON POUR GÉNÉRER L'IMAGE DEPUIS LA DESCRIPTION IA */}
               {hasGeminiAnalyzed && (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800/40">
                   <span className="text-xs text-slate-400">
                     {isGeneratingImage
-                      ? "Génération de l'image en cours..."
+                      ? "Génération FLUX.1 en cours..."
+                      : cooldown > 0
+                      ? `Attendez ${cooldown}s avant de régénérer (limite gratuite).`
+                      : (currentImageSource === 'ia_ouverte' || currentImageSource === 'hf')
+                      ? "Image IA générée. Vous pouvez régénérer une autre variante."
                       : "Générez une image de reconstitution basée sur la description ci-dessus."}
                   </span>
                   <button
                     onClick={handleGenererImage}
-                    disabled={isGeneratingImage}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-500 hover:from-violet-500 hover:to-fuchsia-400 shadow-md shadow-violet-500/20 transition disabled:opacity-50 cursor-pointer"
+                    disabled={isGeneratingImage || cooldown > 0}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-500 hover:from-violet-500 hover:to-fuchsia-400 shadow-md shadow-violet-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isGeneratingImage ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                         Image en cours...
+                      </>
+                    ) : cooldown > 0 ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Disponible dans {cooldown}s
+                      </>
+                    ) : (currentImageSource === 'ia_ouverte' || currentImageSource === 'hf') ? (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Régénérer une variante IA
                       </>
                     ) : (
                       <>
