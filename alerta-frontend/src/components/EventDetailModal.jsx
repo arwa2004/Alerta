@@ -28,11 +28,30 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Gestionnaire de décompte pour le quota gratuit Pollinations (45s)
+  // Synchronisation dynamique si les props de l'événement changent
+  useEffect(() => {
+    setDescription(event.description || '');
+    setCurrentDescriptionSource(event.description_source || 'simulation');
+    if (event.image_reconstituee) {
+      const url = event.image_reconstituee.startsWith('http')
+        ? event.image_reconstituee
+        : `http://127.0.0.1:8000${event.image_reconstituee}`;
+      setCurrentImageUrl(url + '?t=' + Date.now());
+    }
+    setCurrentImageSource(event.image_source || 'simulation');
+  }, [event]);
+
+  // Gestionnaire de décompte pour le quota (décroît chaque seconde)
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => {
-      setCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
@@ -112,7 +131,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         setCurrentImageUrl(url + '?t=' + Date.now());
       }
       setCurrentImageSource(updated.image_source || 'ia_ouverte');
-      setCooldown(45); // Cooldown de 45s imposé par le niveau gratuit
+      setCooldown(15); // Délai court de sécurité de 15s
       if (onEventUpdated) onEventUpdated(updated);
     } catch (err) {
       console.error('Erreur génération image', err);
