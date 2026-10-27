@@ -64,7 +64,16 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           >
             Accueil
           </button>
-
+<button
+  onClick={() => setActiveTab && setActiveTab('zones')}
+  className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+    activeTab === 'zones'
+      ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+      : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+  }`}
+>
+  Zones &amp; Visages
+</button>
           {/* Bouton Dashboard Admin UNIQUEMENT visible par les administrateurs */}
           {isAdmin && (
             <button

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import UserSettings from '../components/UserSettings';
-
+import RecognitionModule from '../components/recognition/RecognitionModule';
 export default function AdminDashboard({
   user,
   adminStats,
@@ -130,13 +130,14 @@ export default function AdminDashboard({
                 <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M2</span>
               </div>
 
-              <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
-                <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  Visages &amp; Personnes
-                </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M3</span>
-              </div>
+              <button
+  onClick={() => setActiveAdminNav('recognition')}
+  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
+    activeAdminNav === 'recognition' ? 'bg-[#E4F8F9] text-[#00838F]' : 'text-[#4A5568] hover:bg-gray-100 hover:text-[#0B1F3A]'
+  }`}
+>
+  Zones &amp; Visages
+</button>
 
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
                 <span className="flex items-center gap-3">
@@ -207,7 +208,7 @@ export default function AdminDashboard({
             <span>Dashboard Administrateur</span>
             <span>/</span>
             <span className="font-semibold text-[#0B1F3A]">
-              {activeAdminNav === 'settings' ? 'Paramètres & Sécurité' : activeAdminNav === 'users' ? 'Utilisateurs & Comptes' : "Vue d'ensemble"}
+              {activeAdminNav === 'recognition' ? 'Zones & Visages' : activeAdminNav === 'settings' ? 'Paramètres & Sécurité' : activeAdminNav === 'users' ? 'Utilisateurs & Comptes' : "Vue d'ensemble"}
             </span>
           </div>
 
@@ -248,7 +249,9 @@ export default function AdminDashboard({
           )}
 
           {/* ════════════ VUE PARAMÈTRES & SÉCURITÉ (PROFIL, 2FA, SÉCURITÉ) ════════════ */}
-          {activeAdminNav === 'settings' ? (
+          {activeAdminNav === 'recognition' ? (
+  <RecognitionModule />
+) : activeAdminNav === 'settings' ? (
             <UserSettings
               user={user}
               updateProfile={updateProfile}

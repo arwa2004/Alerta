@@ -36,6 +36,7 @@ INSTALLED_APPS = [
 
     # Modules Alerta
     'users',
+    'recognition',
 ]
 
 MIDDLEWARE = [
@@ -137,6 +138,7 @@ SIMPLE_JWT = {
 }
 
 # Autoriser React (Vite et React standard)
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -145,3 +147,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Seuil de netteté minimale pour l'enrôlement biométrique (adapté vidéosurveillance)
+RECOGNITION_MIN_SHARPNESS = 2.0
+

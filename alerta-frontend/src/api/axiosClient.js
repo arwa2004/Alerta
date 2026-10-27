@@ -7,12 +7,17 @@ const axiosClient = axios.create({
   },
 });
 
-// Intercepteur de requête : injecte le token JWT
+// Intercepteur de requête : injecte le token JWT et gère correctement FormData
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Si la requête envoie un FormData (upload de fichiers), on retire 'Content-Type'
+    // pour laisser le navigateur insérer automatiquement 'multipart/form-data; boundary=...'
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
     }
     return config;
   },
