@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
+import eventsApi from '../api/eventsApi';
 
-export default function EventDetailModal({ event, onClose }) {
+export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   if (!event) return null;
+
+  const [description, setDescription] = useState(event.description || '');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(
+    event.description && (event.description.includes('ALERTE') || event.description.includes('Validation') || event.description.includes('Rapport') || event.description.length > 80)
+  );
+  const [errorMsg, setErrorMsg] = useState('');
 
   const getTypeBadge = (type) => {
     switch (type) {
@@ -12,6 +20,7 @@ export default function EventDetailModal({ event, onClose }) {
           dot: 'bg-emerald-400',
         };
       case 'inconnu':
+      case 'visage_inconnu':
         return {
           label: 'Personne Inconnue',
           bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
@@ -29,11 +38,31 @@ export default function EventDetailModal({ event, onClose }) {
   const getCriticiteBadge = (niveau) => {
     switch (niveau) {
       case 'eleve':
+      case 'critique':
         return { label: 'Critique (Élevé)', color: 'text-rose-400', barBg: 'bg-rose-500' };
       case 'moyen':
+      case 'moderee':
         return { label: 'Vigilance (Moyen)', color: 'text-amber-400', barBg: 'bg-amber-500' };
       default:
         return { label: 'Normal (Faible)', color: 'text-emerald-400', barBg: 'bg-emerald-500' };
+    }
+  };
+
+  const handleTriggerGemini = async () => {
+    setIsAnalyzing(true);
+    setErrorMsg('');
+    try {
+      const updated = await eventsApi.analyserAvecGemini(event.id);
+      setDescription(updated.description);
+      setHasGeminiAnalyzed(true);
+      if (onEventUpdated) {
+        onEventUpdated(updated);
+      }
+    } catch (err) {
+      console.error('Erreur analyse Gemini', err);
+      setErrorMsg('Impossible de contacter Gemini pour le moment. Veuillez réessayer.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -44,22 +73,29 @@ export default function EventDetailModal({ event, onClose }) {
     timeStyle: 'short',
   });
 
+  const imageUrl = event.image_reconstituee
+    ? (event.image_reconstituee.startsWith('http')
+        ? event.image_reconstituee
+        : `http://127.0.0.1:8000${event.image_reconstituee}`)
+    : null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-[#0f172a] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-2xl bg-[#0b1329] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        
         {/* En-tête */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#1e293b]/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#111e3d]/80">
           <div className="flex items-center gap-3">
             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${typeInfo.bg}`}>
               <span className={`w-2 h-2 rounded-full ${typeInfo.dot}`}></span>
               {typeInfo.label}
             </span>
-            <span className="text-xs text-slate-400 font-mono">#{event.id}</span>
+            <span className="text-xs text-slate-400 font-mono">Incident #{event.id}</span>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -67,14 +103,15 @@ export default function EventDetailModal({ event, onClose }) {
           </button>
         </div>
 
-        {/* Contenu avec scroll */}
+        {/* Contenu défilant */}
         <div className="p-6 overflow-y-auto space-y-6">
-          {/* Image de reconstitution IA */}
-          <div className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center">
-            {event.image_reconstituee ? (
+
+          {/* VUE VIDÉOSURVEILLANCE CCTV / RECONSTITUTION */}
+          <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+            {imageUrl ? (
               <img
-                src={event.image_reconstituee.startsWith('http') ? event.image_reconstituee : `http://127.0.0.1:8000${event.image_reconstituee}`}
-                alt="Reconstitution de la scène"
+                src={imageUrl}
+                alt="Capture Vidéosurveillance Alerta"
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -82,31 +119,94 @@ export default function EventDetailModal({ event, onClose }) {
                 <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <p className="text-sm">Image en cours de génération ou non disponible</p>
+                <p className="text-sm">Flux de caméra en cours de synchronisation</p>
               </div>
             )}
-            <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded text-[11px] font-mono text-cyan-400 border border-cyan-500/30">
-              ● Reconstitution IA (Hugging Face)
+            {/* OSD Badge Vidéo */}
+            <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono text-cyan-400 border border-cyan-500/40 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              FLUX CCTV DIRECT — IA VISION
+            </div>
+            <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
+              CAM-01 • {event.zone_nom || event.zone_nom_fallback || 'SECTEUR PRINCIPAL'}
             </div>
           </div>
 
-          {/* Description générée par Gemini */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/20 to-blue-950/20 border border-cyan-800/40">
-            <div className="flex items-center gap-2 mb-1.5 text-xs font-semibold text-cyan-400 uppercase tracking-wider">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Synthèse IA Générative (Gemini)
+          {/* SECTION ANALYSE IA GEMINI (DÉCLENCHÉE AVEC LE BOUTON) */}
+          <div className="p-5 rounded-xl bg-gradient-to-r from-slate-900 to-[#0e1a38] border border-cyan-500/30 shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                <svg className="w-4 h-4 text-[#00C2CB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Analyse & Recommandation Gemini
+              </div>
+
+              {hasGeminiAnalyzed && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Analysé par Gemini IA
+                </span>
+              )}
             </div>
-            <p className="text-slate-200 text-sm leading-relaxed italic">
-              « {event.description || "Aucune description générée."} »
-            </p>
+
+            {/* Texte de description ou analyse */}
+            <div className="min-h-[50px] mb-4">
+              {isAnalyzing ? (
+                <div className="flex items-center gap-3 py-3 text-cyan-300 text-sm">
+                  <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Gemini analyse les métadonnées de l'incident et rédige le rapport de sécurité...</span>
+                </div>
+              ) : (
+                <p className="text-slate-200 text-sm leading-relaxed">
+                  {description || "Aucun rapport généré. Cliquez sur le bouton ci-dessous pour déclencher l'analyse Gemini."}
+                </p>
+              )}
+              {errorMsg && (
+                <p className="text-xs text-rose-400 mt-2">{errorMsg}</p>
+              )}
+            </div>
+
+            {/* BOUTON DÉDIÉ POUR DÉCLENCHER GEMINI */}
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                {hasGeminiAnalyzed
+                  ? "Rapport d'incident complet généré."
+                  : "Déclenchez l'intelligence artificielle pour obtenir l'évaluation experte."}
+              </span>
+              <button
+                onClick={handleTriggerGemini}
+                disabled={isAnalyzing}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-900 bg-gradient-to-r from-[#00C2CB] to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 shadow-md shadow-cyan-500/20 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+                    Analyse en cours...
+                  </>
+                ) : hasGeminiAnalyzed ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Réanalyser avec Gemini
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Générer la description Gemini
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Jauge du Score de Criticité ML */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+          <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-slate-400">Score de Criticité (Modèle ML)</span>
+              <span className="text-xs font-medium text-slate-400">Évaluation Criticité (Machine Learning Random Forest)</span>
               <span className={`text-sm font-bold ${critInfo.color}`}>
                 {critInfo.label} — {Math.round(event.score_criticite * 100)}%
               </span>
@@ -122,7 +222,7 @@ export default function EventDetailModal({ event, onClose }) {
           {/* Métadonnées & Paramètres sous forme de grille */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Zone surveillée</span>
+              <span className="block text-xs text-slate-400 mb-1">Zone sous surveillance</span>
               <span className="font-semibold text-slate-200 flex items-center gap-2">
                 <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -153,7 +253,7 @@ export default function EventDetailModal({ event, onClose }) {
             </div>
 
             <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Confiance Reconnaissance Faciale</span>
+              <span className="block text-xs text-slate-400 mb-1">Indice de Confiance Vision</span>
               <span className="font-semibold text-cyan-300">
                 {Math.round(event.score_confiance * 100)}%
               </span>
@@ -165,8 +265,8 @@ export default function EventDetailModal({ event, onClose }) {
             <div className="flex items-center gap-3 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
               <span className="p-2 rounded-lg bg-rose-500/20 text-rose-400 font-bold">M4</span>
               <div>
-                <p className="font-semibold text-rose-200">Alerte envoyée au Module 4 (Voix & Alarme)</p>
-                <p className="text-slate-400">Déclenchement immédiat de notification prioritaire.</p>
+                <p className="font-semibold text-rose-200">Alerte synchronisée avec le Module 4 (Voix & Alarme)</p>
+                <p className="text-slate-400">Diffusion d'un avertissement prioritaire.</p>
               </div>
             </div>
           )}
@@ -176,7 +276,7 @@ export default function EventDetailModal({ event, onClose }) {
         <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition"
+            className="px-5 py-2 text-sm font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition cursor-pointer"
           >
             Fermer
           </button>

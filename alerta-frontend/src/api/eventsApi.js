@@ -33,6 +33,16 @@ export const eventsApi = {
     return res.data;
   },
 
+  // Analyse et description générée à la demande via Google Gemini
+  analyserAvecGemini: async (id) => {
+    const res = await axios.post(
+      `${BASE_URL}evenements/${id}/analyser-gemini/`,
+      {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
   // Suppression d'un événement
   deleteEvenement: async (id) => {
     const res = await axios.delete(`${BASE_URL}evenements/${id}/`, {
@@ -41,7 +51,7 @@ export const eventsApi = {
     return res.data;
   },
 
-  // Déclencheur de simulation en direct (très utile pour la démo)
+  // Déclencheur de simulation en direct
   simulateEvenement: async (scenario = 'inconnu') => {
     const res = await axios.post(
       `${BASE_URL}evenements/simulate/`,
@@ -51,7 +61,7 @@ export const eventsApi = {
     return res.data;
   },
 
-  // Liste des zones
+  // Liste des zones de surveillance
   getZones: async () => {
     const res = await axios.get(`${BASE_URL}zones/`, {
       headers: getAuthHeaders(),

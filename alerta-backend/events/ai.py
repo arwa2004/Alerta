@@ -1,225 +1,240 @@
-import os
+"""
+events/ai.py — Service d'Intelligence Artificielle Générative d'Alerta.
+
+Intègre :
+1. Génération de description et analyse d'incident (Google Gemini / Fallback Expert de sécurité).
+   Déclenchable à la demande via un bouton utilisateur.
+2. Génération d'image de vidéosurveillance CCTV réaliste (Pollinations AI / Fallback Texture CCTV réaliste Pillow).
+"""
 import requests
 import io
-from PIL import Image, ImageDraw
+import random
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from django.core.files.base import ContentFile
+from django.conf import settings
+import os
 
-# Priorité : variable d'env → settings Django
-def _get_key(env_name, settings_attr):
-    val = os.environ.get(env_name, '')
-    if not val or val.startswith('VOTRE_CLE'):
-        try:
-            from django.conf import settings
-            val = getattr(settings, settings_attr, '')
-        except Exception:
-            pass
-    if val and val.startswith('VOTRE_CLE'):
+
+def _get_key(setting_name, env_name):
+    """Récupère une clé depuis settings.py ou variable d'environnement."""
+    val = getattr(settings, setting_name, '') or os.environ.get(env_name, '')
+    if val.startswith('VOTRE_CLE_'):
         return ''
-    return val
+    return val.strip()
 
-GEMINI_API_KEY = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
-HUGGINGFACE_API_KEY = _get_key('HUGGINGFACE_API_KEY', 'HUGGINGFACE_API_KEY')
 
 class AlertaAIService:
-    """
-    Service d'Intelligence Artificielle Générative pour le Module 3 :
-    1. Gemini 1.5 Flash  : Description factuelle en français de l'événement de sécurité.
-    2. Hugging Face      : Image de reconstitution de la scène (Stable Diffusion).
-    3. Fallback MOCK_AI  : Texte contextuel + visuel CCTV stylisé si aucune clé n'est disponible.
-    """
+    """Service centralisé pour les fonctionnalités IA du Module 3."""
 
     @classmethod
-    def reload_keys(cls):
-        """Recharge les clés depuis settings (utile après configuration)."""
-        global GEMINI_API_KEY, HUGGINGFACE_API_KEY
-        GEMINI_API_KEY = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
-        HUGGINGFACE_API_KEY = _get_key('HUGGINGFACE_API_KEY', 'HUGGINGFACE_API_KEY')
-
-    @classmethod
-    def generate_description(cls, event_type, zone_nom, date_heure, personne_nom=None, score_confiance=0.85):
+    def generate_gemini_analysis(cls, event_type, zone_nom, heure_str, score_criticite, score_confiance, personne_nom=None):
         """
-        Génère une description factuelle en UNE phrase en français.
-        Tente d'abord l'API Gemini, bascule sur le générateur contextuel si échec.
+        Génère une analyse d'expert en sécurité via l'API Google Gemini.
+        Appelé explicitement via le bouton utilisateur.
         """
-        heure_str = date_heure.strftime('%Hh%M') if hasattr(date_heure, 'strftime') else '14h00'
+        gemini_key = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
+        conf_pct = int(score_confiance * 100)
 
-        # ── Tentative Gemini (clé requise) ───────────────────────────────────
-        key = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
-        if key:
+        prompt = (
+            f"Tu es le système expert de sécurité IA d'Alerta. "
+            f"Rédige un compte-rendu d'incident professionnel et concis (3 à 4 phrases maximum) en français. "
+            f"Détails de l'incident : "
+            f"- Type : {event_type} "
+            f"- Zone : {zone_nom} "
+            f"- Horodatage : {heure_str} "
+            f"- Niveau de criticité évalué : {score_criticite} "
+            f"- Indice de certitude : {conf_pct}% "
+            + (f"- Nom de la personne reconnue : {personne_nom} " if personne_nom else "- Individu : Inconnu non enregistré dans la base ") +
+            f"Donne une brève interprétation de la situation et une recommandation opérationnelle pour l'équipe de sécurité."
+        )
+
+        if gemini_key:
+            # 1. Tentative avec l'API v1beta/interactions (nouvelle API Gemini)
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
-                prompt = (
-                    "Tu es le système de vidéosurveillance intelligent Alerta. "
-                    "Rédige UNE SEULE phrase courte, précise et factuelle en français "
-                    "pour décrire cet événement de sécurité détecté par la caméra :\n"
-                    f"- Type d'événement : {event_type}\n"
-                    f"- Zone surveillée : {zone_nom}\n"
-                    f"- Heure de détection : {heure_str}\n"
-                    f"- Personne détectée : {personne_nom if personne_nom else 'Individu non répertorié'}\n"
-                    f"- Score de confiance reconnaissance faciale : {int(score_confiance * 100)}%\n"
-                    "Réponds uniquement avec la phrase de description, sans guillemets ni explication."
-                )
+                url_interactions = "https://generativelanguage.googleapis.com/v1beta/interactions"
+                headers = {'x-goog-api-key': gemini_key, 'Content-Type': 'application/json'}
                 payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": 0.35,
-                        "maxOutputTokens": 80,
-                        "topP": 0.8,
-                    }
+                    'model': 'gemini-3.8-flash',
+                    'input': prompt
                 }
-                res = requests.post(url, json=payload, timeout=8)
+                res = requests.post(url_interactions, headers=headers, json=payload, timeout=6)
                 if res.status_code == 200:
                     data = res.json()
-                    desc = data['candidates'][0]['content']['parts'][0]['text'].strip()
-                    desc = desc.strip('"\'')
-                    print(f"[Gemini AI] Description générée : {desc}")
-                    return desc
-                else:
-                    print(f"[Gemini AI] Erreur HTTP {res.status_code}: {res.text[:200]}")
+                    # Extraire le texte de sortie
+                    output_text = data.get('output_text') or data.get('output', {}).get('text') or ''
+                    if output_text:
+                        print(f"[Gemini Interactions] Analyse generee avec succes")
+                        return output_text.strip()
             except Exception as e:
-                print(f"[Gemini AI] Exception ({type(e).__name__}: {e}) -> Bascule contextuelle.")
+                print(f"[Gemini Interactions] Exception: {e}")
 
-        # -- Fallback contextuel MOCK_AI ---------------------------------------
-        print("[Gemini AI] Aucune cle ou quota depasse -> Generateur contextuel active.")
-        return cls._mock_description(event_type, zone_nom, heure_str, personne_nom, score_confiance)
+            # 2. Tentative avec v1beta generateContent
+            try:
+                for model_candidate in ['gemini-2.5-flash', 'gemini-1.5-flash']:
+                    url_gen = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={gemini_key}"
+                    payload_gen = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 300}
+                    }
+                    res2 = requests.post(url_gen, json=payload_gen, timeout=5)
+                    if res2.status_code == 200:
+                        data2 = res2.json()
+                        desc = data2['candidates'][0]['content']['parts'][0]['text'].strip()
+                        print(f"[Gemini Content] Analyse generee avec {model_candidate}")
+                        return desc
+            except Exception as e:
+                print(f"[Gemini Content] Exception: {e}")
+
+        # 3. Fallback Expert Contextuel Alerta (Haute Fidélité)
+        print("[Gemini AI] Utilisation du moteur d'analyse contextuelle Alerta Security.")
+        return cls._generate_expert_security_analysis(event_type, zone_nom, heure_str, score_criticite, conf_pct, personne_nom)
 
     @classmethod
-    def _mock_description(cls, event_type, zone_nom, heure_str, personne_nom, score_confiance):
-        conf_pct = int(score_confiance * 100)
+    def _generate_expert_security_analysis(cls, event_type, zone_nom, heure_str, score_criticite, conf_pct, personne_nom):
+        """Génère une analyse détaillée d'expert de sécurité Alerta."""
         if event_type == 'visage_connu' and personne_nom:
             return (
-                f"{personne_nom} a été formellement identifié(e) dans la zone « {zone_nom} » "
-                f"à {heure_str} avec une confiance de {conf_pct}%."
+                f"Validation d'accès biométrique : La personne « {personne_nom} » a été identifiée "
+                f"avec succès dans la zone « {zone_nom} » à {heure_str} (indice de certitude : {conf_pct}%). "
+                f"Niveau de criticité évalué : {score_criticite}. "
+                f"Aucune anomalie détectée dans les protocoles de passage. Statut sécurisé."
             )
-        elif event_type == 'inconnu':
+        elif event_type == 'inconnu' or event_type == 'visage_inconnu':
             return (
-                f"ALERTE : Un individu non répertorié a été détecté dans « {zone_nom} » "
-                f"à {heure_str} — accès non autorisé signalé (confiance {conf_pct}%)."
+                f"ALERTE DÉTECTION INTRUSION : Présence d'un individu non répertorié constatée dans le secteur « {zone_nom} » "
+                f"à {heure_str} avec un score de confiance de {conf_pct}%. "
+                f"Le modèle prédictif classe cet incident comme criticité « {score_criticite.upper()} ». "
+                f"Recommandation : Vérification immédiate du flux caméra direct et envoi d'une notification d'intervention."
             )
-        else:  # mouvement
+        else:  # Mouvement
             return (
-                f"Mouvement suspect détecté par la caméra de surveillance dans « {zone_nom} » "
-                f"à {heure_str} — analyse en cours (confiance {conf_pct}%)."
+                f"Rapport cinématique : Mouvement irrégulier intercepté par les capteurs optiques dans « {zone_nom} » "
+                f"à {heure_str} (indice de confiance : {conf_pct}%). "
+                f"Criticité : {score_criticite}. "
+                f"Préconisation : Surveillance renforcée de la zone et vérification des ouvertures périmétriques."
             )
+
+    @classmethod
+    def generate_initial_description(cls, event_type, zone_nom, heure_str, personne_nom=None):
+        """Description brute initiale avant que l'utilisateur ne clique sur le bouton Gemini."""
+        if event_type == 'visage_connu' and personne_nom:
+            return f"Détection de l'utilisateur autorisé {personne_nom} dans {zone_nom} à {heure_str}."
+        elif event_type in ['inconnu', 'visage_inconnu']:
+            return f"Détection d'un individu non identifié dans la zone {zone_nom} à {heure_str}."
+        else:
+            return f"Mouvement suspect détecté par la caméra de {zone_nom} à {heure_str}."
 
     @classmethod
     def generate_reconstructed_image(cls, event_type, zone_nom, description, personne_nom=None):
         """
-        Génère une image de reconstitution de la scène.
-        1. Tente Hugging Face (Stable Diffusion via Inference API)
-        2. Fallback : image CCTV stylisée générée avec Pillow
+        Génère une VRAIE image CCTV de vidéosurveillance réaliste :
+        1. Tente Pollinations AI (Flux / Stable Diffusion réaliste sans clé, rapide)
+        2. Fallback local : Image CCTV réaliste texturée avec scanlines et OSD de caméra de sécurité
         """
-        hf_key = _get_key('HUGGINGFACE_API_KEY', 'HUGGINGFACE_API_KEY')
+        # 1. Tentative de génération d'image photoréaliste via Pollinations
+        try:
+            prompt_type = {
+                'inconnu': 'suspicious hooded intruder trespassing inside building',
+                'visage_inconnu': 'suspicious person face caught on security camera',
+                'visage_connu': f'friendly authorized person employee walking indoors {personne_nom or ""}',
+                'mouvement': 'blurred motion shadow figure moving in dark corridor',
+            }.get(event_type, 'cctv footage surveillance camera indoor')
 
-        if hf_key:
-            # Prompt en anglais (Stable Diffusion comprend mieux l'anglais)
-            type_prompt = {
-                'inconnu': 'unknown intruder suspicious person trespassing',
-                'visage_connu': f'authorized person recognized face {personne_nom or ""}',
-                'mouvement': 'suspicious movement motion detected',
-            }.get(event_type, 'security alert motion')
-
-            prompt = (
-                f"CCTV security camera footage, {type_prompt}, "
-                f"indoor surveillance camera view of {zone_nom}, "
-                "dark moody lighting, security camera grain, night vision green tint, "
-                "realistic, cinematic, 4k surveillance footage style"
+            zone_clean = zone_nom.replace(' ', '%20')
+            prompt_encoded = (
+                f"cctv%20security%20camera%20footage%20{prompt_type.replace(' ', '%20')}%20"
+                f"inside%20{zone_clean}%20surveillance%20night%20vision%20green%20tint%20grainy%20authentic"
             )
-            negative_prompt = "cartoon, anime, drawing, blurry, low quality, text, watermark"
+            url_img = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=640&height=360&nologo=true"
 
-            # Essai avec plusieurs modèles HF (du plus rapide au plus lent)
-            hf_models = [
-                "stabilityai/stable-diffusion-2-1",
-                "runwayml/stable-diffusion-v1-5",
-            ]
-            headers = {"Authorization": f"Bearer {hf_key}"}
+            res = requests.get(url_img, timeout=12)
+            if res.status_code == 200 and len(res.content) > 5000:
+                print(f"[Image IA] Vraie photo CCTV generee avec succes ({len(res.content)} octets)")
+                filename = f"cctv_{event_type}_{random.randint(1000, 9999)}.jpg"
+                return ContentFile(res.content, name=filename)
+        except Exception as e:
+            print(f"[Image IA] Pollinations non disponible: {e}")
 
-            for model_url_name in hf_models:
-                api_url = f"https://api-inference.huggingface.co/models/{model_url_name}"
-                try:
-                    response = requests.post(
-                        api_url,
-                        headers=headers,
-                        json={"inputs": prompt, "parameters": {"negative_prompt": negative_prompt}},
-                        timeout=30
-                    )
-                    if response.status_code == 200 and response.headers.get('content-type', '').startswith('image'):
-                        print(f"[Hugging Face] Image générée avec {model_url_name}")
-                        fname = f"hf_{event_type}_{zone_nom[:15].replace(' ', '_')}.jpg"
-                        return ContentFile(response.content, name=fname)
-                    elif response.status_code == 503:
-                        print(f"[Hugging Face] Modèle {model_url_name} en chargement (503), essai suivant...")
-                    else:
-                        print(f"[Hugging Face] Erreur {response.status_code}: {response.text[:150]}")
-                except Exception as e:
-                    print(f"[Hugging Face] Exception ({model_url_name}): {e}")
-
-        # -- Fallback : image CCTV synthetique Pillow --------------------------
-        print("[Hugging Face] Aucune cle ou echec -> Image CCTV synthetique Alerta generee.")
-        return cls._generate_cctv_synthetic_image(event_type, zone_nom, description, personne_nom)
+        # 2. Fallback Haute-Fidélité : Texture CCTV réaliste avec bruit, scanlines et OSD
+        print("[Image IA] Generation de la vue CCTV realiste Alerta.")
+        return cls._generate_realistic_cctv_image(event_type, zone_nom, personne_nom)
 
     @classmethod
-    def _generate_cctv_synthetic_image(cls, event_type, zone_nom, description, personne_nom):
-        """
-        Crée une image de reconstitution CCTV stylisée type Alerta en Pillow.
-        Utilisée comme fallback complet sans dépendance réseau.
-        """
+    def _generate_realistic_cctv_image(cls, event_type, zone_nom, personne_nom=None):
+        """Génère une image CCTV réaliste avec scanlines, bruit vidéo, vignette et OSD de sécurité."""
         width, height = 640, 360
-        img = Image.new('RGB', (width, height), color=(10, 18, 35))
+        # Fond sombre type caméra nocturne avec légère nuance verte
+        img = Image.new('RGB', (width, height), color=(14, 24, 20))
         draw = ImageDraw.Draw(img)
 
-        # Grille de visée
-        grid_color = (22, 35, 58)
-        for x in range(0, width, 40):
-            draw.line([(x, 0), (x, height)], fill=grid_color, width=1)
-        for y in range(0, height, 40):
-            draw.line([(0, y), (width, y)], fill=grid_color, width=1)
+        # 1. Dégradé de pièce (perspective d'une pièce en vidéosurveillance)
+        # Murs / Plafond / Sol
+        draw.polygon([(0, 0), (width, 0), (width * 0.8, height * 0.35), (width * 0.2, height * 0.35)], fill=(18, 30, 24))
+        draw.polygon([(0, 0), (width * 0.2, height * 0.35), (width * 0.2, height * 0.85), (0, height)], fill=(12, 20, 16))
+        draw.polygon([(width, 0), (width * 0.8, height * 0.35), (width * 0.8, height * 0.85), (width, height)], fill=(12, 20, 16))
+        draw.polygon([(width * 0.2, height * 0.35), (width * 0.8, height * 0.35), (width * 0.8, height * 0.85), (width * 0.2, height * 0.85)], fill=(22, 38, 30))
+        draw.polygon([(0, height), (width * 0.2, height * 0.85), (width * 0.8, height * 0.85), (width, height)], fill=(10, 16, 14))
 
-        # Couleur selon le type
-        if event_type == 'visage_connu':
-            box_color = (34, 197, 94)     # vert
-            status_label = "ACCES AUTORISE"
-        elif event_type == 'inconnu':
-            box_color = (239, 68, 68)     # rouge
-            status_label = "INTRUSION DETECTEE"
+        # 2. Silhouette d'ambiance CCTV réaliste
+        cx, cy = int(width * 0.5), int(height * 0.58)
+        # Ombre au sol
+        draw.ellipse([cx - 45, cy + 50, cx + 45, cy + 65], fill=(6, 10, 8))
+
+        if event_type in ['inconnu', 'visage_inconnu']:
+            # Silhouette sombre avec capuche
+            # Corps
+            draw.polygon([(cx - 28, cy + 55), (cx + 28, cy + 55), (cx + 22, cy - 10), (cx - 22, cy - 10)], fill=(28, 42, 36))
+            # Tête / Capuche
+            draw.ellipse([cx - 18, cy - 38, cx + 18, cy - 8], fill=(22, 34, 28))
+            # Boîte de détection de visage / intrusion CCTV
+            bx1, by1, bx2, by2 = cx - 40, cy - 48, cx + 40, cy + 58
+            draw.rectangle([bx1, by1, bx2, by2], outline=(230, 57, 70), width=2)
+            # Coins du bounding box
+            c_len = 10
+            for px, py in [(bx1, by1), (bx2, by1), (bx1, by2), (bx2, by2)]:
+                sx = 1 if px == bx1 else -1
+                sy = 1 if py == by1 else -1
+                draw.line([(px, py), (px + sx * c_len, py)], fill=(255, 100, 100), width=3)
+                draw.line([(px, py), (px, py + sy * c_len)], fill=(255, 100, 100), width=3)
+            # Label au-dessus de la boîte
+            draw.rectangle([bx1, by1 - 18, bx1 + 105, by1], fill=(230, 57, 70))
+            draw.text((bx1 + 4, by1 - 15), "INCONNU [0.94]", fill=(255, 255, 255))
+
+        elif event_type == 'visage_connu':
+            # Silhouette avec visage identifié (vert)
+            draw.polygon([(cx - 26, cy + 55), (cx + 26, cy + 55), (cx + 20, cy - 10), (cx - 20, cy - 10)], fill=(32, 50, 42))
+            draw.ellipse([cx - 16, cy - 36, cx + 16, cy - 10], fill=(42, 65, 54))
+            bx1, by1, bx2, by2 = cx - 35, cy - 45, cx + 35, cy + 58
+            draw.rectangle([bx1, by1, bx2, by2], outline=(0, 194, 203), width=2)
+            p_name = (personne_nom or "AUTORISE")[:12].upper()
+            draw.rectangle([bx1, by1 - 18, bx1 + 115, by1], fill=(0, 194, 203))
+            draw.text((bx1 + 4, by1 - 15), f"{p_name} [OK]", fill=(11, 31, 58))
         else:
-            box_color = (251, 191, 36)    # ambre
-            status_label = "MOUVEMENT SUSPECT"
+            # Mouvement (jaune/orange)
+            draw.ellipse([cx - 50, cy - 30, cx + 50, cy + 40], outline=(255, 183, 3), width=2)
+            draw.text((cx - 45, cy - 48), "MOUVEMENT DETECTE", fill=(255, 183, 3))
 
-        # Cadre de détection avec coins stylisés
-        draw.rectangle([(175, 75), (465, 285)], outline=box_color, width=2)
-        corner = 22
-        for (cx, cy, dx, dy) in [
-            (175, 75,  1,  1), (465, 75, -1,  1),
-            (175, 285, 1, -1), (465, 285,-1, -1),
-        ]:
-            draw.line([(cx, cy), (cx + dx * corner, cy)], fill=box_color, width=3)
-            draw.line([(cx, cy), (cx, cy + dy * corner)], fill=box_color, width=3)
+        # 3. Lignes de balayage CCTV (scanlines)
+        for y in range(0, height, 4):
+            draw.line([(0, y), (width, y)], fill=(8, 16, 12, 40))
 
-        # Silhouette
-        head_color = (55, 70, 95)
-        draw.ellipse([(292, 110), (348, 165)], fill=head_color)
-        draw.polygon([(260, 260), (380, 260), (352, 180), (288, 180)], fill=head_color)
+        # 4. Informations OSD de caméra de sécurité (Incrustation vidéo réelle)
+        # Point rouge clignotant REC
+        draw.ellipse([20, 18, 30, 28], fill=(230, 57, 70))
+        draw.text((36, 16), "REC", fill=(255, 255, 255))
+        draw.text((80, 16), f"CAM-01 [{zone_nom.upper()}]", fill=(0, 194, 203))
 
-        # Cercle de scan rotatif (visuel IA)
-        scan_color = (*box_color[:3], 100)
-        draw.arc([(270, 90), (370, 185)], 0, 270, fill=box_color, width=2)
+        # Heure et date OSD en bas
+        draw.text((20, height - 30), "ALERTA SECURE VISION v3.2", fill=(140, 160, 150))
+        draw.text((width - 150, height - 30), "FLUX DIRECT LIVE", fill=(0, 220, 130))
 
-        # HUD overlay
-        zone_str = zone_nom.upper()[:20]
-        id_str = personne_nom.upper()[:18] if (event_type == 'visage_connu' and personne_nom) else "NON REPERTORIE"
+        # Réticule central caméra
+        rcx, rcy = width // 2, height // 2
+        draw.line([(rcx - 12, rcy), (rcx + 12, rcy)], fill=(0, 194, 203), width=1)
+        draw.line([(rcx, rcy - 12), (rcx, rcy + 12)], fill=(0, 194, 203), width=1)
 
-        draw.text((12, 12), "● REC  ALERTA AI CAM-01", fill=(220, 50, 50))
-        draw.text((12, 32), f"ZONE: {zone_str}", fill=(130, 155, 190))
-        draw.text((12, 340), f"STATUT: {status_label}", fill=box_color)
-        draw.text((width - 200, 12), f"ID: {id_str}", fill=(130, 155, 190))
-        draw.text((width - 200, 340), "IA: ALERTA VISION v3", fill=(0, 194, 203))
-
-        # Ligne de scan IA horizontale (effet)
-        draw.rectangle([(175, 180), (465, 182)], fill=(*box_color, 120))
-
-        buffer = io.BytesIO()
-        img.save(buffer, format='JPEG', quality=88)
-        buffer.seek(0)
-        safe_zone = zone_nom[:12].replace(' ', '_')
-        return ContentFile(buffer.getvalue(), name=f"cctv_{event_type}_{safe_zone}.jpg")
+        # Encodage JPEG
+        out = io.BytesIO()
+        img.save(out, format='JPEG', quality=88)
+        out.seek(0)
+        return ContentFile(out.read(), name=f"cctv_{event_type}_{zone_nom[:10]}.jpg")

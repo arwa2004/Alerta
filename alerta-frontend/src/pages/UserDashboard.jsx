@@ -362,7 +362,14 @@ export default function UserDashboard() {
 
       {/* ── Modal Détail Événement ─────────────────────────────────────────── */}
       {selectedEvent && (
-        <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <EventDetailModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          onEventUpdated={(updated) => {
+            setSelectedEvent(updated);
+            fetchStats();
+          }}
+        />
       )}
 
       {/* ── Modal Confirmation Déconnexion ─────────────────────────────────── */}

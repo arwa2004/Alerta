@@ -357,6 +357,10 @@ export default function Events() {
           <EventDetailModal
             event={selectedEvent}
             onClose={() => setSelectedEvent(null)}
+            onEventUpdated={(updated) => {
+              setSelectedEvent(updated);
+              fetchEvents(page);
+            }}
           />
         )}
       </div>

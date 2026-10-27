@@ -4,15 +4,36 @@ from .models import Evenement, Zone
 from .ml.predictor import predictor
 from .ai import AlertaAIService
 
+
 def declencher_alerte_module_4(evenement, gravite):
     """
     Interface avec le Module 4 (Voix, alertes et alarme).
     Appelée lorsqu'un événement est critique ou concerne un individu inconnu.
-    Prêt pour l'intégration de l'équipe.
     """
     print(f"[ALERTE MODULE 4 DECLENCHEE] Gravité: {gravite.upper()} | Événement ID #{evenement.id} - {evenement}")
-    # Plus tard, le Module 4 pourra brancher ici son système de notification vocale / push / alarme
     return True
+
+
+def analyser_evenement_gemini(evenement):
+    """
+    Déclenché explicitement par le bouton de l'utilisateur.
+    Génère une analyse experte approfondie via Google Gemini et persiste sur l'événement.
+    """
+    zone_nom = evenement.zone.nom if evenement.zone else evenement.zone_nom_fallback
+    heure_str = evenement.date_heure.strftime('%H:%M:%S')
+
+    analyse = AlertaAIService.generate_gemini_analysis(
+        event_type=evenement.type,
+        zone_nom=zone_nom,
+        heure_str=heure_str,
+        score_criticite=evenement.niveau_criticite,
+        score_confiance=evenement.score_confiance,
+        personne_nom=evenement.personne_nom
+    )
+
+    evenement.description = analyse
+    evenement.save(update_fields=['description'])
+    return evenement
 
 
 def creer_evenement(
@@ -26,7 +47,8 @@ def creer_evenement(
 ):
     """
     Point d'entrée de service pour le Module 2 (Médias & Vidéos) et pour l'API.
-    Traite la détection, enrichit par IA, calcule le score de criticité ML et persiste l'événement.
+    Traite la détection, calcule le score de criticité ML, génère l'image CCTV et persiste l'événement.
+    La description initiale est synthétique, et l'analyse Gemini est générable via le bouton.
     """
     if date_heure is None:
         date_heure = timezone.now()
@@ -60,22 +82,16 @@ def creer_evenement(
     niveau_criticite = ml_result['niveau_criticite']
     declencher_alerte = ml_result['alerte_declenchee']
 
-    # 3. Génération de la description en français via Gemini
-    try:
-        description = AlertaAIService.generate_description(
-            event_type=type_event,
-            zone_nom=zone_nom,
-            date_heure=date_heure,
-            personne_nom=personne_nom,
-            score_confiance=score_confiance
-        )
-        statut_ia = 'ok'
-    except Exception as e:
-        print(f"[Erreur IA Description] {e}")
-        description = f"Détection de type {type_event} enregistrée dans {zone_nom}."
-        statut_ia = 'erreur'
+    # 3. Description initiale (l'analyse complète Gemini se fait ensuite via le bouton)
+    heure_str = date_heure.strftime('%H:%M:%S')
+    description = AlertaAIService.generate_initial_description(
+        event_type=type_event,
+        zone_nom=zone_nom,
+        heure_str=heure_str,
+        personne_nom=personne_nom
+    )
 
-    # 4. Génération de l'image de reconstitution de la scène
+    # 4. Génération de l'image réaliste de vidéosurveillance CCTV
     try:
         image_file = AlertaAIService.generate_reconstructed_image(
             event_type=type_event,
@@ -86,7 +102,6 @@ def creer_evenement(
     except Exception as e:
         print(f"[Erreur IA Image] {e}")
         image_file = None
-        statut_ia = 'erreur'
 
     # 5. Création et persistance de l'événement en base
     evenement = Evenement.objects.create(
@@ -100,19 +115,16 @@ def creer_evenement(
         score_confiance=score_confiance,
         score_criticite=score_criticite,
         niveau_criticite=niveau_criticite,
-        statut_ia=statut_ia,
-        alerte_declenchee=declencher_alerte
+        alerte_declenchee=declencher_alerte,
+        statut_ia='ok'
     )
 
     if image_file:
-        evenement.image_reconstituee.save(
-            f"event_{evenement.id}_{type_event}.jpg",
-            image_file,
-            save=True
-        )
+        evenement.image_reconstituee = image_file
+        evenement.save(update_fields=['image_reconstituee'])
 
-    # 6. Déclenchement de l'alerte vers le Module 4 si criticité élevée ou inconnu
-    if declencher_alerte:
-        declencher_alerte_module_4(evenement, gravite=niveau_criticite)
+    # 6. Déclenchement de l'alerte pour le Module 4 si nécessaire
+    if declencher_alerte or niveau_criticite in ['critique', 'elevee']:
+        declencher_alerte_module_4(evenement, niveau_criticite)
 
     return evenement

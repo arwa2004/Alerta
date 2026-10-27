@@ -9,7 +9,7 @@ from django.db.models import Count, Q
 
 from .models import Evenement, Zone
 from .serializers import EvenementSerializer, EvenementCreateSerializer, ZoneSerializer
-from .services import creer_evenement
+from .services import creer_evenement, analyser_evenement_gemini
 from users.permissions import IsOwnerOrAdmin, IsAdminUserRole
 
 class ZoneListCreateView(generics.ListCreateAPIView):
@@ -48,13 +48,11 @@ class EvenementListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # Isolation stricte des données : admin voit tout, user normal voit uniquement les siennes
         if user.role == 'admin' or user.is_superuser:
             qs = Evenement.objects.all().select_related('user', 'zone')
         else:
             qs = Evenement.objects.filter(user=user).select_related('user', 'zone')
 
-        # Filtre optionnel par période (date_debut, date_fin)
         date_debut = self.request.query_params.get('date_debut')
         date_fin = self.request.query_params.get('date_fin')
         if date_debut:
@@ -69,7 +67,6 @@ class EvenementListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Appel du service métier central
         evenement = creer_evenement(
             user=request.user,
             type_event=data.get('type', 'mouvement'),
@@ -97,6 +94,24 @@ class EvenementDetailView(generics.RetrieveDestroyAPIView):
         if user.role == 'admin' or user.is_superuser:
             return Evenement.objects.all().select_related('user', 'zone')
         return Evenement.objects.filter(user=user).select_related('user', 'zone')
+
+
+class EvenementGeminiAnalyseView(APIView):
+    """
+    POST /api/evenements/{id}/analyser-gemini/
+    Déclenché explicitement par le bouton utilisateur pour générer l'analyse IA Gemini.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+
+    def post(self, request, pk):
+        try:
+            evenement = Evenement.objects.get(pk=pk)
+        except Evenement.DoesNotExist:
+            return Response({'detail': 'Événement non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
+
+        self.check_object_permissions(request, evenement)
+        evenement = analyser_evenement_gemini(evenement)
+        return Response(EvenementSerializer(evenement, context={'request': request}).data)
 
 
 class EvenementSimulateView(APIView):
@@ -159,11 +174,7 @@ class EvenementSimulateView(APIView):
 class DashboardStatsView(APIView):
     """
     GET /api/dashboard/
-    Fournit les statistiques consolidées pour l'Accueil Utilisateur et l'Admin :
-    - Compteurs totaux, événements aujourd'hui, alertes critiques
-    - Répartition par type d'événement
-    - Répartition par criticité ML
-    - 5 derniers événements récents
+    Statistiques consolidées pour l'Accueil Utilisateur et l'Admin.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -185,7 +196,6 @@ class DashboardStatsView(APIView):
         critiques_count = qs.filter(niveau_criticite='eleve').count()
         alertes_count = qs.filter(alerte_declenchee=True).count()
 
-        # Derniers événements (les 5 plus récents)
         derniers = qs.order_by('-date_heure')[:5]
         derniers_data = EvenementSerializer(derniers, many=True, context={'request': request}).data
 

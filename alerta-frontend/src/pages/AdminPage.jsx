@@ -717,7 +717,14 @@ export default function AdminPage() {
 
       {/* ════════════════════════════════ MODALS ══════════════════════════════ */}
       {selectedEvent && (
-        <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <EventDetailModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          onEventUpdated={(updated) => {
+            setSelectedEvent(updated);
+            fetchEventsStats();
+          }}
+        />
       )}
 
       {showLogoutModal && (
