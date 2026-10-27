@@ -11,6 +11,16 @@ from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Chargement automatique et robuste du fichier .env sans dépendance externe
+env_file = BASE_DIR / '.env'
+if env_file.exists():
+    with open(env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = 'django-insecure-kz-&4$^h5@uj0r90q7uer7b(ym&doz#+n=(aod6-2s)_$dwesp'
 
