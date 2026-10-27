@@ -6,9 +6,16 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
 
   const [description, setDescription] = useState(event.description || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(
-    event.description && (event.description.includes('ALERTE') || event.description.includes('Validation') || event.description.includes('Rapport') || event.description.length > 80)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState(
+    event.image_reconstituee
+      ? (event.image_reconstituee.startsWith('http')
+          ? event.image_reconstituee
+          : `http://127.0.0.1:8000${event.image_reconstituee}`)
+      : null
   );
+  const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
 
   const getTypeBadge = (type) => {
@@ -66,6 +73,27 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     }
   };
 
+  const handleGenererImage = async () => {
+    setIsGeneratingImage(true);
+    setErrorMsg('');
+    try {
+      const updated = await eventsApi.genererImage(event.id);
+      if (updated.image_reconstituee) {
+        const url = updated.image_reconstituee.startsWith('http')
+          ? updated.image_reconstituee
+          : `http://127.0.0.1:8000${updated.image_reconstituee}`;
+        setCurrentImageUrl(url + '?t=' + Date.now());
+      }
+      setCurrentImageSource(updated.image_source || 'ia_ouverte');
+      if (onEventUpdated) onEventUpdated(updated);
+    } catch (err) {
+      console.error('Erreur génération image', err);
+      setErrorMsg("Erreur lors de la génération de l'image. Réessayez.");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   const typeInfo = getTypeBadge(event.type);
   const critInfo = getCriticiteBadge(event.niveau_criticite);
   const formattedDate = new Date(event.date_heure).toLocaleString('fr-FR', {
@@ -73,14 +101,9 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     timeStyle: 'short',
   });
 
-  const imageUrl = event.image_reconstituee
-    ? (event.image_reconstituee.startsWith('http')
-        ? event.image_reconstituee
-        : `http://127.0.0.1:8000${event.image_reconstituee}`)
-    : null;
-
-  const isHfImage = event.image_source === 'hf';
-  const isOpenAiImage = event.image_source === 'ia_ouverte';
+  const imageUrl = currentImageUrl;
+  const isHfImage = currentImageSource === 'hf';
+  const isOpenAiImage = currentImageSource === 'ia_ouverte';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -177,38 +200,70 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
 
             {/* BOUTON DÉDIÉ POUR DÉCLENCHER GEMINI */}
-            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-xs text-slate-400">
-                {hasGeminiAnalyzed
-                  ? "Rapport d'incident complet généré."
-                  : "Déclenchez l'intelligence artificielle pour obtenir l'évaluation experte."}
-              </span>
-              <button
-                onClick={handleTriggerGemini}
-                disabled={isAnalyzing}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-900 bg-gradient-to-r from-[#00C2CB] to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 shadow-md shadow-cyan-500/20 transition disabled:opacity-50 cursor-pointer"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
-                    Analyse en cours...
-                  </>
-                ) : hasGeminiAnalyzed ? (
-                  <>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Réanalyser avec Gemini
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Générer la description Gemini
-                  </>
-                )}
-              </button>
+            <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  {hasGeminiAnalyzed
+                    ? "Description de scène générée par l'IA."
+                    : "Déclenchez l'IA pour décrire la scène de l'incident."}
+                </span>
+                <button
+                  onClick={handleTriggerGemini}
+                  disabled={isAnalyzing}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-900 bg-gradient-to-r from-[#00C2CB] to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 shadow-md shadow-cyan-500/20 transition disabled:opacity-50 cursor-pointer"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+                      Analyse en cours...
+                    </>
+                  ) : hasGeminiAnalyzed ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Réanalyser avec Gemini
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Générer la description Gemini
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* BOUTON POUR GÉNÉRER L'IMAGE DEPUIS LA DESCRIPTION IA */}
+              {hasGeminiAnalyzed && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    {isGeneratingImage
+                      ? "Génération de l'image en cours..."
+                      : "Générez une image de reconstitution basée sur la description ci-dessus."}
+                  </span>
+                  <button
+                    onClick={handleGenererImage}
+                    disabled={isGeneratingImage}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-500 hover:from-violet-500 hover:to-fuchsia-400 shadow-md shadow-violet-500/20 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {isGeneratingImage ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Image en cours...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Générer l'image depuis cette description
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

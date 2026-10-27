@@ -10,6 +10,7 @@ from django.db.models import Count, Q
 from .models import Evenement, Zone
 from .serializers import EvenementSerializer, EvenementCreateSerializer, ZoneSerializer
 from .services import creer_evenement, analyser_evenement_gemini
+from .ai import AlertaAIService
 from users.permissions import IsOwnerOrAdmin, IsAdminUserRole
 
 class ZoneListCreateView(generics.ListCreateAPIView):
@@ -169,6 +170,31 @@ class EvenementSimulateView(APIView):
             EvenementSerializer(evenement, context={'request': request}).data,
             status=status.HTTP_201_CREATED
         )
+
+
+class EvenementGenererImageView(APIView):
+    """
+    POST /api/evenements/{id}/generer-image/
+    Déclenché par le bouton "Générer image" dans la modale.
+    Génère (ou régénère) l'image de reconstitution depuis la description IA actuelle de l'événement.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+
+    def post(self, request, pk):
+        try:
+            evenement = Evenement.objects.get(pk=pk)
+        except Evenement.DoesNotExist:
+            return Response({'detail': 'Événement non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
+
+        self.check_object_permissions(request, evenement)
+
+        try:
+            AlertaAIService.generer_image_reconstitution(evenement)
+            evenement.refresh_from_db()
+        except Exception as e:
+            return Response({'detail': f'Erreur génération image : {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(EvenementSerializer(evenement, context={'request': request}).data)
 
 
 class DashboardStatsView(APIView):

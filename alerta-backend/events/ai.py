@@ -34,23 +34,31 @@ class AlertaAIService:
     @classmethod
     def generate_gemini_analysis(cls, event_type, zone_nom, heure_str, score_criticite, score_confiance, personne_nom=None):
         """
-        Génère une analyse d'expert en sécurité via l'API Google Gemini.
-        Appelé explicitement via le bouton utilisateur.
+        Génère une description de scène réaliste via l'API Google Gemini.
+        Appelé explicitement via le bouton utilisateur dans la modale.
+        La description est focalisée sur CE QUI S'EST PASSÉ concrètement dans la scène,
+        sans termes techniques (pas de score, pas de modèle prédictif, pas de recommandation générique).
         """
         gemini_key = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
-        conf_pct = int(score_confiance * 100)
+
+        if event_type in ['inconnu', 'visage_inconnu']:
+            situation = f"une personne non reconnue a été détectée dans la zone « {zone_nom} » à {heure_str}"
+            consigne = "Décris concrètement ce que la caméra aurait capturé : les gestes, l'attitude, le comportement de la personne, l'ambiance de la scène. Sois précis et visuel."
+        elif event_type == 'visage_connu':
+            nom = personne_nom or 'un résident connu'
+            situation = f"{nom} a été identifié(e) dans la zone « {zone_nom} » à {heure_str}"
+            consigne = "Décris le passage normal de cette personne : son allure, ses gestes, ce que la caméra aurait capturé au moment de son entrée."
+        else:
+            situation = f"un mouvement inhabituel a été détecté dans la zone « {zone_nom} » à {heure_str}"
+            consigne = "Décris ce que la caméra aurait capturé : la nature du mouvement, l'origine possible, l'ambiance visuelle de la scène."
 
         prompt = (
-            f"Tu es le système expert de sécurité IA d'Alerta. "
-            f"Rédige un compte-rendu d'incident professionnel et concis (3 à 4 phrases maximum) en français. "
-            f"Détails de l'incident : "
-            f"- Type : {event_type} "
-            f"- Zone : {zone_nom} "
-            f"- Horodatage : {heure_str} "
-            f"- Niveau de criticité évalué : {score_criticite} "
-            f"- Indice de confiance de détection : {conf_pct}% "
-            + (f"- Nom de la personne reconnue : {personne_nom} " if personne_nom else "- Individu : Inconnu non enregistré ") +
-            f"Donne une brève interprétation de la situation et une recommandation opérationnelle pour l'équipe de sécurité."
+            f"Tu es une IA de reconstitution de scène de sécurité. "
+            f"Situation détectée : {situation}. "
+            f"{consigne} "
+            f"Réponds UNIQUEMENT avec 2 à 3 phrases de description de scène. "
+            f"N'inclus PAS de score, de pourcentage, de niveau de criticité, ni de recommandation. "
+            f"Écris comme si tu décrivais une image que tu vois."
         )
 
         if gemini_key:
@@ -92,28 +100,28 @@ class AlertaAIService:
 
     @classmethod
     def _generate_expert_security_analysis(cls, event_type, zone_nom, heure_str, score_criticite, conf_pct, personne_nom):
-        """Génère une analyse détaillée d'expert de sécurité Alerta."""
+        """
+        Fallback sans API : génère une description de scène réaliste et contextuelle.
+        Focalisée sur CE QUI SE PASSE dans la scène, sans termes techniques.
+        """
+        import random
         if event_type == 'visage_connu' and personne_nom:
-            return (
-                f"Validation d'accès : La personne « {personne_nom} » a été identifiée "
-                f"dans la zone « {zone_nom} » à {heure_str} (indice de confiance : {conf_pct}%). "
-                f"Niveau de criticité évalué : {score_criticite}. "
-                f"Aucune anomalie détectée dans les protocoles de passage. Statut sécurisé."
-            )
+            scenes = [
+                f"La caméra de la zone « {zone_nom} » a capturé {personne_nom} franchissant l'accès à {heure_str}. La démarche est assurée, le passage rapide et direct vers l'intérieur. Rien d'inhabituel dans le comportement observé.",
+                f"À {heure_str}, {personne_nom} est entré(e) dans la zone « {zone_nom} ». La silhouette est reconnaissable immédiatement, le mouvement calme et familier. La porte s'est refermée normalement derrière la personne.",
+            ]
         elif event_type in ['inconnu', 'visage_inconnu']:
-            return (
-                f"ALERTE DÉTECTION INTRUSION : Présence d'un individu non répertorié constatée dans le secteur « {zone_nom} » "
-                f"à {heure_str} (indice de confiance détection : {conf_pct}%). "
-                f"Le modèle prédictif classe cet incident comme criticité « {score_criticite.upper()} ». "
-                f"Recommandation : Vérification du média source et envoi d'une notification d'intervention."
-            )
-        else:  # Mouvement
-            return (
-                f"Rapport cinématique : Mouvement irrégulier intercepté par les capteurs dans « {zone_nom} » "
-                f"à {heure_str} (indice de confiance : {conf_pct}%). "
-                f"Criticité : {score_criticite}. "
-                f"Préconisation : Surveillance renforcée de la zone et vérification des ouvertures périmétriques."
-            )
+            scenes = [
+                f"La caméra de « {zone_nom} » a enregistré une silhouette inconnue à {heure_str}. La personne longe le mur, le capuchon relevé, les mouvements lents et furtifs. Elle marque une pause avant de se diriger vers l'intérieur.",
+                f"À {heure_str}, une personne non identifiée est apparue dans le champ de « {zone_nom} ». Le comportement est hésitant : regards répétés vers les caméras, déplacements irréguliers. La présence semble non planifiée.",
+                f"La scène capturée dans « {zone_nom} » à {heure_str} montre un individu dont le visage n'est pas dans la base. Il s'approche de la zone d'accès, vérifie les alentours, et tente d'ouvrir une porte.",
+            ]
+        else:
+            scenes = [
+                f"La caméra de « {zone_nom} » a détecté un mouvement à {heure_str}. Une ombre traverse rapidement le cadre, probablement causée par un objet déplacé ou une ouverture de porte. La zone redevient calme immédiatement après.",
+                f"À {heure_str}, un déplacement inattendu a été capturé dans « {zone_nom} ». Le mouvement est bref, de faible amplitude, et pourrait correspondre au passage d'un animal ou à un élément extérieur.",
+            ]
+        return random.choice(scenes)
 
     @classmethod
     def generate_initial_description(cls, event_type, zone_nom, heure_str, personne_nom=None):
@@ -156,43 +164,29 @@ class AlertaAIService:
         zone_nom = evenement.zone.nom if evenement.zone else evenement.zone_nom_fallback
 
         # ─── Construction du prompt depuis la description IA ───────────────────────
-        # La description est l'analyse experte générée dès la création (et enrichie par Gemini ensuite).
-        # Elle sert de base sémantique pour guider le modèle text-to-image.
+        # La description est celle générée par Gemini (ou le fallback expert).
+        # Elle décrit concrètement la scène (ex: "silhouette inconnue longe le mur, capuchon relevé...")
+        # C'est cette description qui guide le modèle text-to-image.
         description_ia = evenement.description or ''
 
-        # Prompt principal (bilingue : zone en clair, contexte en anglais pour FLUX.1)
-        # On garde la description IA tronquée (120 car.) pour enrichir le contexte visuel.
-        desc_ascii = description_ia[:120].encode('ascii', 'ignore').decode('ascii').strip()
-        prompt_hf = (
-            f"CCTV security camera surveillance footage still frame, location: {zone_nom}, "
-            f"nighttime low light grainy realistic, "
-            f"{desc_ascii}"
-        )
+        # Nettoyage : garder 150 car. pertinents, convertir en ASCII pour l'API
+        desc_clean = description_ia[:150].encode('ascii', 'ignore').decode('ascii').strip()
 
-        # Traduction contextuelle pour le prompt Pollinations (FLUX.1 optimisé English)
-        severity_map = {'eleve': 'high alert critical intrusion', 'moyen': 'medium alert suspicious', 'faible': 'low alert authorized access'}
-        type_map = {
-            'inconnu': 'unknown intruder unidentified person trespassing restricted zone',
-            'visage_inconnu': 'unidentified suspicious person detected security breach',
-            'visage_connu': f'authorized person {evenement.personne_nom or "resident"} access granted',
-            'mouvement': 'motion detected suspicious movement anomaly area',
-        }
-        severity_ctx = severity_map.get(evenement.niveau_criticite, 'security surveillance')
-        incident_ctx = type_map.get(evenement.type, 'security anomaly detected')
-        prompt_pollinations = (
-            f"CCTV security camera surveillance still frame, {zone_nom}, nighttime, "
-            f"low light, grainy realistic footage, {incident_ctx}, {severity_ctx}, "
-            f"professional security system recording"
+        # Prompt unique utilisé par HF et Pollinations
+        prompt_image = (
+            f"CCTV security camera surveillance footage still frame, "
+            f"location: {zone_nom}, nighttime, low light, grainy, realistic, "
+            f"{desc_clean}"
         )
-        prompt_pollinations_clean = prompt_pollinations.encode('ascii', 'ignore').decode('ascii')
+        prompt_image_safe = prompt_image.encode('ascii', 'ignore').decode('ascii')
 
-        print(f"[IA Image] Prompt base: {prompt_hf[:80]}...")
+        print(f"[IA Image] Prompt depuis description IA: {prompt_image_safe[:100]}...")
 
         # 1. Tentative Hugging Face (text-to-image depuis description IA)
         if hf_token and InferenceClient is not None:
             try:
                 client = InferenceClient(token=hf_token)
-                img = client.text_to_image(prompt_hf, model="black-forest-labs/FLUX.1-schnell")
+                img = client.text_to_image(prompt_image, model="black-forest-labs/FLUX.1-schnell")
                 buf = BytesIO()
                 img.save(buf, format="JPEG")
                 evenement.image_reconstituee.save(
@@ -207,10 +201,10 @@ class AlertaAIService:
             except Exception as e:
                 print(f"[Hugging Face 402/Indisponible -> Bascule vers Pollinations FLUX.1]")
 
-        # 2. Alternative gratuite Pollinations — prompt construit depuis la description IA
+        # 2. Alternative gratuite Pollinations — même prompt construit depuis la description IA
         try:
             import urllib.parse
-            url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_pollinations_clean)}"
+            url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_image_safe)}"
             params = {"width": 640, "height": 360, "nologo": "true", "seed": random.randint(100, 999999)}
             res = requests.get(url_pollinations, params=params, timeout=25)
             if res.status_code == 200 and len(res.content) > 3000:

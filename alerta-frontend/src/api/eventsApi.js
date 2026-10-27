@@ -61,6 +61,16 @@ export const eventsApi = {
     return res.data;
   },
 
+  // Génération (ou régénération) de l'image de reconstitution depuis la description IA actuelle
+  genererImage: async (id) => {
+    const res = await axios.post(
+      `${BASE_URL}evenements/${id}/generer-image/`,
+      {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
   // Liste des zones de surveillance
   getZones: async () => {
     const res = await axios.get(`${BASE_URL}zones/`, {

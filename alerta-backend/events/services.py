@@ -86,15 +86,12 @@ def creer_evenement(
     niveau_criticite = evaluation['niveau_criticite']
     declencher_alerte = evaluation['alerte_declenchee']
 
-    # 2. Description experte IA générée dès la création (utilisée aussi pour le prompt image)
-    # Gemini enrichit la description à la demande via le bouton, mais la base est déjà une analyse complète.
+    # 2. Description initiale courte (la description de scène complète vient du bouton Gemini)
     heure_str = date_heure.strftime('%H:%M:%S')
-    description = AlertaAIService.generer_description_experte(
+    description = AlertaAIService.generate_initial_description(
         event_type=type_event,
         zone_nom=zone_nom,
         heure_str=heure_str,
-        score_criticite=niveau_criticite,
-        score_confiance=score_confiance,
         personne_nom=personne_nom
     )
 
@@ -115,12 +112,15 @@ def creer_evenement(
         statut_ia='ok'
     )
 
-    # 4. Reconstitution visuelle par IA (Hugging Face, IA ouverte FLUX.1 ou simulation)
+    # 4. Génération du rendu visuel de simulation par défaut
+    # L'image IA (FLUX.1) est générée UNIQUEMENT via le bouton "Générer l'image"
+    # dans la modale, APRÈS que Gemini a produit la description de scène.
     try:
-        AlertaAIService.generer_image_reconstitution(evenement)
-        evenement.refresh_from_db()
+        AlertaAIService.generer_rendu_simulation(evenement)
+        evenement.image_source = 'simulation'
+        evenement.save(update_fields=['image_reconstituee', 'image_source'])
     except Exception as e:
-        print(f"[Erreur Reconstitution Image] {e}")
+        print(f"[Erreur Simulation Locale] {e}")
 
     # 5. Déclenchement de l'alerte pour le Module 4 si nécessaire
     if declencher_alerte or niveau_criticite in ['critique', 'eleve']:
