@@ -35,6 +35,7 @@ class EvenementSerializer(serializers.ModelSerializer):
             'niveau_criticite',
             'niveau_criticite_display',
             'image_reconstituee',
+            'image_source',
             'statut_ia',
             'alerte_declenchee',
             'created_at',

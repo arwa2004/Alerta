@@ -79,6 +79,8 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         : `http://127.0.0.1:8000${event.image_reconstituee}`)
     : null;
 
+  const isHfImage = event.image_source === 'hf';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-2xl bg-[#0b1329] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -106,12 +108,12 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         {/* Contenu défilant */}
         <div className="p-6 overflow-y-auto space-y-6">
 
-          {/* VUE VIDÉOSURVEILLANCE CCTV / RECONSTITUTION */}
+          {/* RECONSTITUTION VISUELLE DE LA SCÈNE */}
           <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
             {imageUrl ? (
               <img
                 src={imageUrl}
-                alt="Capture Vidéosurveillance Alerta"
+                alt="Reconstitution visuelle de la scène"
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -119,16 +121,18 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                 <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <p className="text-sm">Flux de caméra en cours de synchronisation</p>
+                <p className="text-sm">Image illustrative en cours de génération</p>
               </div>
             )}
-            {/* OSD Badge Vidéo */}
-            <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono text-cyan-400 border border-cyan-500/40 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              FLUX CCTV DIRECT — IA VISION
+
+            {/* Bandeau d'information Reconstitution */}
+            <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono border flex items-center gap-2 border-cyan-500/40 text-cyan-300">
+              <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : 'bg-amber-400'}`}></span>
+              {isHfImage ? 'Reconstitution IA (Hugging Face)' : 'Reconstitution de la scène (Simulation)'}
             </div>
+
             <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
-              CAM-01 • {event.zone_nom || event.zone_nom_fallback || 'SECTEUR PRINCIPAL'}
+              Zone : {event.zone_nom || event.zone_nom_fallback || 'Secteur'} • Image illustrative
             </div>
           </div>
 
@@ -242,20 +246,20 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
 
             <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Personne identifiée</span>
-              <span className="font-semibold text-slate-200">
-                {event.personne_nom ? (
-                  <span className="text-emerald-400 font-bold">{event.personne_nom}</span>
+              <span className="block text-xs text-slate-400 mb-1">Origine de l'image</span>
+              <span className="font-semibold text-xs flex items-center gap-1.5">
+                {isHfImage ? (
+                  <span className="text-cyan-400 font-bold">Hugging Face (Inference)</span>
                 ) : (
-                  <span className="text-slate-400 italic">Non répertoriée</span>
+                  <span className="text-amber-400 font-medium">Reconstitution Simulation</span>
                 )}
               </span>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Indice de Confiance Vision</span>
+              <span className="block text-xs text-slate-400 mb-1">Indice Reconnaissance (M1)</span>
               <span className="font-semibold text-cyan-300">
-                {Math.round(event.score_confiance * 100)}%
+                {Math.round(event.score_confiance * 100)}% <span className="text-[10px] text-slate-400 font-normal">(Simulé)</span>
               </span>
             </div>
           </div>

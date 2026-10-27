@@ -47,8 +47,7 @@ def creer_evenement(
 ):
     """
     Point d'entrée de service pour le Module 2 (Médias & Vidéos) et pour l'API.
-    Traite la détection, calcule le score de criticité ML, génère l'image CCTV et persiste l'événement.
-    La description initiale est synthétique, et l'analyse Gemini est générable via le bouton.
+    Traite la détection, calcule le score de criticité ML, reconstitue la scène via Hugging Face et persiste l'événement.
     """
     if date_heure is None:
         date_heure = timezone.now()
@@ -91,19 +90,7 @@ def creer_evenement(
         personne_nom=personne_nom
     )
 
-    # 4. Génération de l'image réaliste de vidéosurveillance CCTV
-    try:
-        image_file = AlertaAIService.generate_reconstructed_image(
-            event_type=type_event,
-            zone_nom=zone_nom,
-            description=description,
-            personne_nom=personne_nom
-        )
-    except Exception as e:
-        print(f"[Erreur IA Image] {e}")
-        image_file = None
-
-    # 5. Création et persistance de l'événement en base
+    # 4. Création de l'événement en base de données
     evenement = Evenement.objects.create(
         user=user,
         zone=zone,
@@ -116,12 +103,15 @@ def creer_evenement(
         score_criticite=score_criticite,
         niveau_criticite=niveau_criticite,
         alerte_declenchee=declencher_alerte,
+        image_source='simulation',
         statut_ia='ok'
     )
 
-    if image_file:
-        evenement.image_reconstituee = image_file
-        evenement.save(update_fields=['image_reconstituee'])
+    # 5. Reconstitution visuelle par IA (Hugging Face ou fallback simulation)
+    try:
+        AlertaAIService.generer_image_reconstitution(evenement)
+    except Exception as e:
+        print(f"[Erreur Reconstitution Image] {e}")
 
     # 6. Déclenchement de l'alerte pour le Module 4 si nécessaire
     if declencher_alerte or niveau_criticite in ['critique', 'elevee']:

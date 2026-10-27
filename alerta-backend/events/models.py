@@ -110,6 +110,18 @@ class Evenement(models.Model):
         verbose_name="Niveau de criticité"
     )
 
+    IMAGE_SOURCE_CHOICES = [
+        ('hf', 'Hugging Face (IA)'),
+        ('simulation', 'Simulation locale'),
+    ]
+
+    image_source = models.CharField(
+        max_length=20,
+        choices=IMAGE_SOURCE_CHOICES,
+        default='simulation',
+        verbose_name="Origine de l'image"
+    )
+
     image_reconstituee = models.ImageField(
         upload_to='events/reconstitutions/',
         blank=True,
