@@ -265,24 +265,36 @@ class AlertaAIService:
 
         print(f"[IA Image] Prompt depuis description IA: {prompt_image_safe[:100]}...")
 
-        # 1. Tentative Hugging Face (text-to-image depuis description IA)
-        if hf_token and InferenceClient is not None:
+        # 1. Tentative Hugging Face via Space FLUX.1 (Gratuit, 100% sur Hugging Face sans quota payant)
+        if hf_token:
             try:
-                client = InferenceClient(token=hf_token)
-                img = client.text_to_image(prompt_image, model="black-forest-labs/FLUX.1-schnell")
-                buf = BytesIO()
-                img.save(buf, format="JPEG")
-                evenement.image_reconstituee.save(
-                    f"hf_{evenement.id}.jpg",
-                    ContentFile(buf.getvalue()),
-                    save=False
+                from gradio_client import Client as GradioClient
+                print("[Hugging Face Space] Connexion au Space officiel FLUX.1-schnell...")
+                hf_client = GradioClient("black-forest-labs/FLUX.1-schnell", token=hf_token)
+                result = hf_client.predict(
+                    prompt=prompt_image_safe,
+                    seed=0,
+                    randomize_seed=True,
+                    width=640,
+                    height=360,
+                    num_inference_steps=4,
+                    api_name="/infer"
                 )
-                evenement.image_source = "hf"
-                evenement.save(update_fields=['image_reconstituee', 'image_source'])
-                print("[Hugging Face] Image generee depuis description IA (image_source=hf)")
-                return True, "Image générée avec succès via Hugging Face."
+                image_path = result[0] if isinstance(result, (list, tuple)) else result
+                if image_path and os.path.exists(image_path):
+                    with open(image_path, "rb") as f_img:
+                        img_bytes = f_img.read()
+                    evenement.image_reconstituee.save(
+                        f"hf_{evenement.id}.webp",
+                        ContentFile(img_bytes),
+                        save=False
+                    )
+                    evenement.image_source = "hf"
+                    evenement.save(update_fields=['image_reconstituee', 'image_source'])
+                    print(f"[Hugging Face Space] Image générée avec succès via Space FLUX.1-schnell (image_source=hf)")
+                    return True, "Image générée avec succès via le Space Hugging Face FLUX.1."
             except Exception as e:
-                print("[Hugging Face 402/Indisponible -> Bascule vers Pollinations FLUX.1]")
+                print(f"[Hugging Face Space Indisponible -> Bascule vers Pollinations FLUX.1 : {e}]")
 
         # 2. Alternative gratuite Pollinations — prompt construit depuis la description IA
         pollinations_error = None
