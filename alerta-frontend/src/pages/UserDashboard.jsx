@@ -5,7 +5,7 @@ import eventsApi from '../api/eventsApi';
 import EventDetailModal from '../components/EventDetailModal';
 import UserSettings from '../components/UserSettings';
 
-export default function UserDashboard() {
+export default function UserDashboard({ initialTab = 'evenements' }) {
   const {
     user, logout,
     updateProfile, changePassword,
@@ -13,7 +13,7 @@ export default function UserDashboard() {
   } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('accueil');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [stats, setStats] = useState({
     total_evenements: 0,
     evenements_aujourdhui: 0,
@@ -27,6 +27,12 @@ export default function UserDashboard() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [simulating, setSimulating] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const displayName = user?.first_name
     ? `${user.first_name} ${user.last_name || ''}`.trim()
@@ -101,27 +107,28 @@ export default function UserDashboard() {
           <div className="flex items-center gap-1">
             {[
               { id: 'accueil', label: 'Tableau de bord' },
+              { id: 'evenements', label: 'Événements' },
               { id: 'parametres', label: 'Mon Compte' },
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === 'evenements') navigate('/events', { replace: true });
+                  else if (tab.id === 'accueil') navigate('/dashboard', { replace: true });
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${
                   activeTab === tab.id
                     ? 'bg-[#00C2CB] text-[#0B1F3A]'
                     : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
                 }`}
               >
+                {tab.id === 'evenements' && (
+                  <span className={`w-2 h-2 rounded-full ${activeTab === 'evenements' ? 'bg-[#0B1F3A]' : 'bg-cyan-400 animate-pulse'}`}></span>
+                )}
                 {tab.label}
               </button>
             ))}
-            <button
-              onClick={() => navigate('/events')}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#B8C7D9] hover:bg-white/10 hover:text-white transition cursor-pointer flex items-center gap-2"
-            >
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-              Événements
-            </button>
           </div>
 
           {/* Profil + déconnexion */}
@@ -151,19 +158,121 @@ export default function UserDashboard() {
         </div>
       </nav>
 
-      {/* ══════════════════ CONTENU PRINCIPAL ═══════════════════════════════ */}
+      {/* ══════════════════ ONGLET TABLEAU DE BORD (ACCUEIL) ══════════════════ */}
       {activeTab === 'accueil' && (
         <main className="flex-1 max-w-7xl mx-auto w-full px-6 md:px-10 py-10 space-y-10">
 
-          {/* Bannière de bienvenue */}
+          {/* Bannière d'accueil générale */}
+          <div className="bg-gradient-to-br from-[#0B1F3A] to-[#12315c] rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+            <div className="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-[#00C2CB]/10 blur-3xl pointer-events-none" />
+            <div className="relative">
+              <span className="text-xs font-bold text-[#00C2CB] tracking-widest uppercase">
+                ● Système Alerta — Tableau de bord
+              </span>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-2 mb-1">
+                Bonjour, {user?.first_name || displayName} 👋
+              </h1>
+              <p className="text-[#B8C7D9] text-base max-w-lg">
+                Bienvenue sur votre espace de contrôle. Votre système de surveillance intelligente analyse vos flux en temps réel.
+              </p>
+            </div>
+            <button
+              onClick={() => { setActiveTab('evenements'); navigate('/events'); }}
+              className="px-6 py-3 rounded-xl bg-[#00C2CB] text-[#0B1F3A] text-sm font-bold hover:bg-cyan-300 transition shadow-lg flex items-center gap-2 cursor-pointer flex-shrink-0"
+            >
+              <span>Accéder aux Événements</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Synthèse du système */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl flex-shrink-0">
+                🛡️
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase">Protection Active</p>
+                <p className="text-xl font-extrabold text-slate-800">Système En Ligne</p>
+                <p className="text-xs text-emerald-600 font-semibold mt-0.5">Surveillance continue 24/7</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-2xl flex-shrink-0">
+                📷
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase">Détections du jour</p>
+                <p className="text-xl font-extrabold text-slate-800">{stats.evenements_aujourdhui} événements</p>
+                <p className="text-xs text-slate-500 mt-0.5">{stats.total_evenements} détections au total</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-2xl flex-shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase">Alertes prioritaires</p>
+                <p className="text-xl font-extrabold text-slate-800">{stats.critiques_count} critiques</p>
+                <p className="text-xs text-rose-600 font-semibold mt-0.5">{stats.alertes_count} alertes transmises à M4</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Raccourcis vers Événements et Mon Compte */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div
+              onClick={() => { setActiveTab('evenements'); navigate('/events'); }}
+              className="bg-white rounded-3xl p-8 border border-slate-200 hover:border-cyan-400 hover:shadow-lg transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-3xl">🎥</span>
+                <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition">
+                  Module 3 →
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Événements & Reconstitution IA</h3>
+              <p className="text-sm text-slate-500">
+                Consultez l'historique complet, générez des descriptions de scènes via Gemini et des reconstitutions visuelles par IA.
+              </p>
+            </div>
+
+            <div
+              onClick={() => setActiveTab('parametres')}
+              className="bg-white rounded-3xl p-8 border border-slate-200 hover:border-[#0B1F3A] hover:shadow-lg transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-3xl">⚙️</span>
+                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-full group-hover:bg-[#0B1F3A] group-hover:text-white transition">
+                  Paramètres →
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Mon Compte & Sécurité 2FA</h3>
+              <p className="text-sm text-slate-500">
+                Gérez votre profil utilisateur, mot de passe et l'authentification à deux facteurs.
+              </p>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ══════════════════ ONGLET ÉVÉNEMENTS (MODULE 3) ════════════════════ */}
+      {activeTab === 'evenements' && (
+        <main className="flex-1 max-w-7xl mx-auto w-full px-6 md:px-10 py-10 space-y-10">
+
+          {/* Bannière des Événements */}
           <div className="bg-gradient-to-br from-[#0B1F3A] to-[#0d2d4a] rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl overflow-hidden relative">
             <div className="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-[#00C2CB]/10 blur-3xl pointer-events-none" />
             <div className="relative">
               <span className="text-xs font-bold text-[#00C2CB] tracking-widest uppercase">
-                ● Surveillance Active — Alerta
+                ● Surveillance Active — Module 3
               </span>
               <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-2 mb-1">
-                Bonjour, {user?.first_name || displayName} 👋
+                Événements & Détections
               </h1>
               <p className="text-[#B8C7D9] text-base max-w-lg">
                 Voici l'état en temps réel de votre système de surveillance intelligente.
@@ -177,12 +286,6 @@ export default function UserDashboard() {
                 className="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition shadow-lg disabled:opacity-50 cursor-pointer"
               >
                 {simulating ? '⏳ Simulation...' : '⚡ Simuler Détection'}
-              </button>
-              <button
-                onClick={() => navigate('/events')}
-                className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20 transition cursor-pointer"
-              >
-                Voir tout →
               </button>
             </div>
           </div>
@@ -201,7 +304,7 @@ export default function UserDashboard() {
               {
                 label: 'Personnes inconnues',
                 value: stats.inconnus_count,
-                sub: `${stats.critiques_count} critiques (ML)`,
+                sub: `${stats.critiques_count} alertes critiques`,
                 icon: '⚠️',
                 accent: 'border-rose-200',
                 subColor: 'text-rose-600',
@@ -252,12 +355,6 @@ export default function UserDashboard() {
                   </span>
                 </p>
               </div>
-              <button
-                onClick={() => navigate('/events')}
-                className="text-sm font-semibold text-cyan-600 hover:text-cyan-700 hover:underline cursor-pointer"
-              >
-                Voir l'historique complet →
-              </button>
             </div>
 
             {stats.derniers_evenements.length === 0 ? (
@@ -275,7 +372,7 @@ export default function UserDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {stats.derniers_evenements.slice(0, 6).map((ev) => (
+                {stats.derniers_evenements.map((ev) => (
                   <div
                     key={ev.id}
                     onClick={() => setSelectedEvent(ev)}
@@ -319,7 +416,7 @@ export default function UserDashboard() {
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
             <h3 className="text-lg font-bold text-slate-800 mb-1">Simuler un scénario de détection</h3>
             <p className="text-sm text-slate-400 mb-6">
-              Testez le pipeline complet : détection → scoring ML → description Gemini → image Hugging Face → alerte.
+              Testez le pipeline complet : détection → évaluation de gravité → description Gemini → reconstitution FLUX.1 → alerte.
             </p>
             <div className="flex flex-wrap gap-3">
               {[

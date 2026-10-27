@@ -82,7 +82,7 @@ function App() {
           {/* ── Dashboard Utilisateur ── */}
           <Route
             path="/dashboard"
-            element={<ProtectedRoute><UserDashboard /></ProtectedRoute>}
+            element={<ProtectedRoute><UserDashboard initialTab="accueil" /></ProtectedRoute>}
           />
 
           {/* ── Dashboard Administrateur ── */}
@@ -91,10 +91,10 @@ function App() {
             element={<AdminRoute><AdminPage /></AdminRoute>}
           />
 
-          {/* ── Historique Événements (accessible à tous les connectés) ── */}
+          {/* ── Section Événements (Module 3) ── */}
           <Route
             path="/events"
-            element={<ProtectedRoute><Events /></ProtectedRoute>}
+            element={<ProtectedRoute><UserDashboard initialTab="evenements" /></ProtectedRoute>}
           />
 
           {/* ── Fallback ── */}
