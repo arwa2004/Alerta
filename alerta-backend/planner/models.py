@@ -70,3 +70,32 @@ class FloorPlan(models.Model):
 
     def __str__(self):
         return f"{self.original_filename} (projet {self.project_id})"
+class FloorPlanAnalysis(models.Model):
+    floor_plan = models.OneToOneField(
+        FloorPlan, on_delete=models.CASCADE, related_name="analysis")
+    result_json = models.JSONField(default=dict)
+    confidence = models.FloatField(default=0.0)
+    warnings = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Analysis of floor plan {self.floor_plan_id}"
+
+
+class CameraOptimization(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name="optimizations")
+    budget = models.DecimalField(max_digits=12, decimal_places=2)
+    camera_config = models.JSONField(default=dict)
+    result_json = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Optimization {self.pk} (budget {self.budget})"
