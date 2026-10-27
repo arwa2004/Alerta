@@ -69,3 +69,16 @@ L'application web est accessible sur : `http://localhost:5173/`
    - Vue d'ensemble avec métriques KPIs réelles et mini-courbes (sparklines).
    - Graphique d'aire de suivi d'activité.
    - Tableau de contrôle des utilisateurs avec recherche, filtres (Rôle, Statut) et bouton d'activation/désactivation de compte en 1 clic.
+
+---
+
+## 📐 Module Planificateur de caméras — Phase 1 (projets + import de plan PDF)
+
+- API (JWT requis, chaque utilisateur ne voit que ses projets) : `/api/planner/`
+  - `GET/POST projects/`, `GET projects/<id>/`
+  - `GET/POST projects/<id>/floor-plans/` (POST multipart : `file` PDF, `page` optionnel, défaut 1)
+  - `GET floor-plans/<id>/` (métadonnées), `GET floor-plans/<id>/image/` (PNG rendu, privé)
+- Stockage **privé** dans `alerta-backend/private_media/` (jamais servi via `/media/`).
+- Variables d'environnement : copier `alerta-backend/.env.example` en `.env`. SQLite par défaut ; `DB_ENGINE=postgres` pour PostgreSQL.
+- Frontend : page `/planner` (lien « Planificateur » dans la barre de navigation).
+- Tests : `python manage.py test planner`

@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
+import Planner from './pages/Planner';
 
 // Composant pour protéger les routes privées
 const ProtectedRoute = ({ children }) => {
@@ -81,6 +82,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard initialTab="admin_dashboard" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/planner"
+            element={
+              <ProtectedRoute>
+                <Planner />
               </ProtectedRoute>
             }
           />

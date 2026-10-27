@@ -14,6 +14,8 @@ __pycache__/
 db.sqlite3
 /media/
 alerta-backend/media/
+alerta-backend/private_media/
+.env
 alerta-backend/staticfiles/
 
 # Node / React

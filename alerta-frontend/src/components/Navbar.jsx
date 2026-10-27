@@ -1,4 +1,5 @@
 import { useContext, useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
@@ -64,6 +65,18 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           >
             Accueil
           </button>
+
+          {/* Planificateur de caméras (Phase 1) */}
+          <Link
+            to="/planner"
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+              activeTab === 'planner'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Planificateur
+          </Link>
 
           {/* Bouton Dashboard Admin UNIQUEMENT visible par les administrateurs */}
           {isAdmin && (
