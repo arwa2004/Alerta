@@ -26,6 +26,7 @@ export default function UserDashboard({ initialTab = 'evenements' }) {
   });
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [simulating, setSimulating] = useState(false);
+  const [photoCapturee, setPhotoCapturee] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
@@ -58,7 +59,11 @@ export default function UserDashboard({ initialTab = 'evenements' }) {
   const handleSimulate = async (scenario = 'inconnu') => {
     setSimulating(true);
     try {
-      const ev = await eventsApi.simulateEvenement(scenario);
+      const payload = photoCapturee
+        ? { scenario, photo_capturee: photoCapturee }
+        : scenario;
+      const ev = await eventsApi.simulateEvenement(payload);
+      setPhotoCapturee(null);
       await fetchStats();
       setSelectedEvent(ev);
     } catch (e) {
@@ -415,9 +420,37 @@ export default function UserDashboard({ initialTab = 'evenements' }) {
           {/* ── Boutons de simulation rapide ─────────────────────────────────── */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
             <h3 className="text-lg font-bold text-slate-800 mb-1">Simuler un scénario de détection</h3>
-            <p className="text-sm text-slate-400 mb-6">
+            <p className="text-sm text-slate-400 mb-4">
               Testez le pipeline complet : détection → évaluation de gravité → description Gemini → reconstitution FLUX.1 → alerte.
             </p>
+
+            {/* Upload capture réelle (Module 2) */}
+            <div className="mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider">
+                Capture photo réelle (Module 2 - optionnel pour Gemini Vision) :
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setPhotoCapturee(e.target.files[0] || null)}
+                  className="text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#00C2CB]/10 file:text-[#008b92] hover:file:bg-[#00C2CB]/20 cursor-pointer"
+                />
+                {photoCapturee && (
+                  <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                    ✓ {photoCapturee.name}
+                    <button
+                      type="button"
+                      onClick={() => setPhotoCapturee(null)}
+                      className="text-slate-400 hover:text-rose-500 ml-1 text-sm font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-3">
               {[
                 { scenario: 'inconnu', label: '🚨 Intrusion Inconnue', cls: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' },

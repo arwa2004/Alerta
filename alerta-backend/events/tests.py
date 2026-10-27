@@ -1,8 +1,11 @@
-from django.test import TestCase
+import tempfile
+from unittest.mock import patch
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APITestCase
 from rest_framework import status
 
 from .models import Evenement, Zone
@@ -168,3 +171,64 @@ class EvenementsModuleTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['type'], 'inconnu')
         self.assertTrue(Evenement.objects.filter(id=response.data['id']).exists())
+
+
+# Image PNG 1x1 minimale pour les tests d'upload
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+    b"\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe"
+    b"\xa7\x1a\x1b\x1b\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class PhotoVisionTests(APITestCase):
+    """
+    Tests unitaires dédiés au pipeline Gemini Vision et upload de photo (Point 1).
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='test.vision@alerta.tn',
+            password='Password123!',
+            first_name='Vision',
+            last_name='Tester',
+            role='user'
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _upload(self, content=TINY_PNG, ctype="image/png"):
+        f = SimpleUploadedFile("cap.png", content, content_type=ctype)
+        return self.client.post(
+            "/api/evenements/simulate/",
+            {"type": "inconnu", "photo_capturee": f},
+            format="multipart"
+        )
+
+    def test_simulate_with_photo(self):
+        """1. Vérifie la création d'événement avec upload de photo réelle."""
+        r = self._upload()
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(r.data["photo_capturee"])
+
+    def test_rejects_non_image(self):
+        """2. Vérifie le rejet d'un fichier non image."""
+        r = self._upload(b"not an image", "text/plain")
+        self.assertEqual(r.status_code, 400)
+
+    @patch("events.services.decrire_photo_gemini", return_value="Une personne devant une porte.")
+    def test_gemini_vision_used(self, _):
+        """3. Vérifie que Gemini Vision est bien sollicité et marque description_source=gemini_vision."""
+        ev_id = self._upload().data["id"]
+        r = self.client.post(f"/api/evenements/{ev_id}/analyser-gemini/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["description_source"], "gemini_vision")
+        self.assertEqual(r.data["description"], "Une personne devant une porte.")
+
+    @patch("events.services.decrire_photo_gemini", side_effect=Exception("quota"))
+    def test_fallback_marked_simulation(self, _):
+        """4. Vérifie le repli propre marqué description_source=simulation en cas d'erreur de quota/API."""
+        ev_id = self._upload().data["id"]
+        r = self.client.post(f"/api/evenements/{ev_id}/analyser-gemini/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["description_source"], "simulation")

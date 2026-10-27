@@ -7,12 +7,66 @@ Intègre :
 3. Fallback Simulation : Rendu visuel d'ambiance en cas d'absence de quotas ou connexion.
 """
 from io import BytesIO
+import base64
+import mimetypes
 import random
 import requests
 from PIL import Image, ImageDraw
 from django.core.files.base import ContentFile
 from django.conf import settings
 import os
+
+
+# ─── Prompt Vision (ne contient PAS le type d'événement : évite la confirmation hallucinée) ──
+_VISION_PROMPT = (
+    "Tu es analyste de vidéosurveillance. Décris en français, en 2 à 3 phrases, "
+    "UNIQUEMENT ce qui est visible sur l'image : personnes, position, actions, objets, éclairage. "
+    "N'invente rien. Si l'image est floue, vide ou illisible, dis-le. Zone : {zone}."
+)
+
+
+def decrire_photo_gemini(ev):
+    """
+    Décrit la vraie photo avec Gemini Vision (multimodal).
+    Utilise settings.GEMINI_MODEL et settings.GEMINI_API_KEY.
+    Lève une exception en cas d'échec (HTTP error, quota, réseau…).
+    """
+    gemini_key = getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+    if gemini_key.startswith('VOTRE_CLE_'):
+        raise ValueError("Clé Gemini non configurée.")
+
+    gemini_model = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+    zone_nom = ev.zone.nom if getattr(ev, 'zone_id', None) else getattr(ev, 'zone_nom_fallback', 'inconnue')
+
+    with ev.photo_capturee.open("rb") as f:
+        image_bytes = f.read()
+
+    b64_data = base64.b64encode(image_bytes).decode('utf-8')
+    mime = mimetypes.guess_type(ev.photo_capturee.name)[0] or "image/jpeg"
+
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{gemini_model}:generateContent"
+    )
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": _VISION_PROMPT.format(zone=zone_nom)},
+                {"inline_data": {"mime_type": mime, "data": b64_data}},
+            ]
+        }],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300},
+    }
+    r = requests.post(
+        url,
+        headers={"x-goog-api-key": gemini_key},
+        json=payload,
+        timeout=30,
+    )
+    r.raise_for_status()
+    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    print(f"[Gemini Vision] Analyse réussie via {gemini_model}.")
+    return text
 
 try:
     from huggingface_hub import InferenceClient

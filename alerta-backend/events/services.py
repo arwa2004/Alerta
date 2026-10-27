@@ -1,7 +1,7 @@
 from datetime import timedelta
 from django.utils import timezone
 from .models import Evenement, Zone
-from .ai import AlertaAIService
+from .ai import AlertaAIService, decrire_photo_gemini
 
 
 def declencher_alerte_module_4(evenement, gravite):
@@ -40,10 +40,42 @@ def evaluer_criticite(type_event, score_confiance=0.85):
         }
 
 
+def analyser_evenement(ev):
+    """
+    Pipeline d'analyse IA propre (Point 1).
+    - photo_capturee présente → Gemini Vision (image réelle), description_source='gemini_vision'
+    - Sans photo → repli local honnête, description_source='simulation'
+    Persiste description + description_source sur l'événement.
+    """
+    if ev.photo_capturee:
+        try:
+            ev.description = decrire_photo_gemini(ev)
+            ev.description_source = 'gemini_vision'
+        except Exception as exc:
+            print(f"[Gemini Vision Fallback] {exc}")
+            zone_nom = ev.zone.nom if ev.zone else ev.zone_nom_fallback
+            heure_str = ev.date_heure.strftime('%H:%M:%S')
+            ev.description = AlertaAIService._generate_scene_description(
+                ev.type, zone_nom, heure_str, ev.personne_nom
+            )
+            ev.description_source = 'simulation'
+    else:
+        zone_nom = ev.zone.nom if ev.zone else ev.zone_nom_fallback
+        heure_str = ev.date_heure.strftime('%H:%M:%S')
+        ev.description = AlertaAIService._generate_scene_description(
+            ev.type, zone_nom, heure_str, ev.personne_nom
+        )
+        ev.description_source = 'simulation'
+
+    ev.save(update_fields=['description', 'description_source'])
+    return ev
+
+
 def analyser_evenement_gemini(evenement):
     """
+    Alias maintenu pour compatibilité ascendante.
+    Préférer analyser_evenement() dans le nouveau code.
     Déclenché explicitement par le bouton de l'utilisateur.
-    Génère une analyse via Google Gemini et persiste sur l'événement.
     - Si photo_capturee est présente : Gemini Vision (analyse visuelle de l'image réelle).
     - Sans photo : description factuelle transparente (étiquetée simulation ou synthèse texte).
     """

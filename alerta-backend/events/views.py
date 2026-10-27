@@ -1,6 +1,7 @@
 from rest_framework import generics, viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
@@ -9,7 +10,7 @@ from django.db.models import Count, Q
 
 from .models import Evenement, Zone
 from .serializers import EvenementSerializer, EvenementCreateSerializer, ZoneSerializer
-from .services import creer_evenement, analyser_evenement_gemini
+from .services import creer_evenement, analyser_evenement, analyser_evenement_gemini
 from .ai import AlertaAIService
 from users.permissions import IsOwnerOrAdmin, IsAdminUserRole
 
@@ -98,6 +99,10 @@ class EvenementDetailView(generics.RetrieveDestroyAPIView):
         return Evenement.objects.filter(user=user).select_related('user', 'zone')
 
 
+ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 Mo
+
+
 class EvenementGeminiAnalyseView(APIView):
     """
     POST /api/evenements/{id}/analyser-gemini/
@@ -112,19 +117,28 @@ class EvenementGeminiAnalyseView(APIView):
             return Response({'detail': 'Événement non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
 
         self.check_object_permissions(request, evenement)
-        evenement = analyser_evenement_gemini(evenement)
+        evenement = analyser_evenement(evenement)
         return Response(EvenementSerializer(evenement, context={'request': request}).data)
 
 
 class EvenementSimulateView(APIView):
     """
     POST /api/evenements/simulate/
-    Générateur d'événements de démonstration en un clic (très utile pour soutenance et tests).
+    Générateur d'événements de démonstration (supporte JSON ou multipart avec photo_capturee).
     """
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         import random
+
+        photo = request.FILES.get("photo_capturee")
+        if photo:
+            if photo.content_type not in ALLOWED_IMAGE_TYPES:
+                return Response({"detail": "Format image non supporté."}, status=status.HTTP_400_BAD_REQUEST)
+            if photo.size > MAX_IMAGE_SIZE:
+                return Response({"detail": "Image trop lourde (5 Mo max)."}, status=status.HTTP_400_BAD_REQUEST)
+
         scenarios = [
             {
                 'type': 'inconnu',
@@ -152,18 +166,29 @@ class EvenementSimulateView(APIView):
             }
         ]
 
-        choice = request.data.get('scenario')
+        choice = request.data.get('scenario') or request.data.get('type')
         if choice and choice in ['inconnu', 'visage_connu', 'mouvement']:
-            scenario = next(s for s in scenarios if s['type'] == choice)
+            matching = [s for s in scenarios if s['type'] == choice]
+            scenario = matching[0] if matching else scenarios[0]
         else:
             scenario = random.choice(scenarios)
 
+        type_event = request.data.get('type') or scenario['type']
+        zone_nom = request.data.get('zone') or request.data.get('zone_nom_fallback') or scenario['zone_nom_fallback']
+        personne_nom = request.data.get('personne_nom', scenario['personne_nom'])
+        
+        try:
+            score_confiance = float(request.data.get('score_confiance', scenario['score_confiance']))
+        except (ValueError, TypeError):
+            score_confiance = scenario['score_confiance']
+
         evenement = creer_evenement(
             user=request.user,
-            type_event=scenario['type'],
-            zone_nom_fallback=scenario['zone_nom_fallback'],
-            personne_nom=scenario['personne_nom'],
-            score_confiance=scenario['score_confiance'],
+            type_event=type_event,
+            zone_nom_fallback=zone_nom,
+            personne_nom=personne_nom,
+            score_confiance=score_confiance,
+            photo_capturee=photo,
             date_heure=timezone.now()
         )
 

@@ -51,12 +51,30 @@ export const eventsApi = {
     return res.data;
   },
 
-  // Déclencheur de simulation en direct
-  simulateEvenement: async (scenario = 'inconnu') => {
+  // Déclencheur de simulation en direct (avec support photo optionnelle)
+  simulateEvenement: async (scenarioOrOptions = 'inconnu') => {
+    let payload;
+    let headers = getAuthHeaders();
+
+    if (typeof scenarioOrOptions === 'object' && scenarioOrOptions !== null) {
+      const fd = new FormData();
+      if (scenarioOrOptions.type || scenarioOrOptions.scenario) {
+        fd.append('type', scenarioOrOptions.type || scenarioOrOptions.scenario);
+        fd.append('scenario', scenarioOrOptions.type || scenarioOrOptions.scenario);
+      }
+      if (scenarioOrOptions.zone) fd.append('zone', scenarioOrOptions.zone);
+      if (scenarioOrOptions.photo_capturee || scenarioOrOptions.photo) {
+        fd.append('photo_capturee', scenarioOrOptions.photo_capturee || scenarioOrOptions.photo);
+      }
+      payload = fd;
+    } else {
+      payload = { scenario: scenarioOrOptions };
+    }
+
     const res = await axios.post(
       `${BASE_URL}evenements/simulate/`,
-      { scenario },
-      { headers: getAuthHeaders() }
+      payload,
+      { headers }
     );
     return res.data;
   },
