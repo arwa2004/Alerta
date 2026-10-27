@@ -88,6 +88,26 @@ class Evenement(models.Model):
         verbose_name="Description générée (Gemini)"
     )
 
+    DESCRIPTION_SOURCE_CHOICES = [
+        ('gemini_vision', 'Gemini Vision (Image réelle)'),
+        ('gemini_texte', 'Synthèse Gemini'),
+        ('simulation', 'Scénario simulé'),
+    ]
+
+    description_source = models.CharField(
+        max_length=30,
+        choices=DESCRIPTION_SOURCE_CHOICES,
+        default='simulation',
+        verbose_name="Origine de la description"
+    )
+
+    photo_capturee = models.ImageField(
+        upload_to='events/captures/',
+        blank=True,
+        null=True,
+        verbose_name="Photo réelle capturée (Module 2)"
+    )
+
     date_heure = models.DateTimeField(
         default=timezone.now,
         verbose_name="Date et heure de détection"

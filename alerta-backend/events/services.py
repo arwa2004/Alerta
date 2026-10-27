@@ -43,22 +43,26 @@ def evaluer_criticite(type_event, score_confiance=0.85):
 def analyser_evenement_gemini(evenement):
     """
     Déclenché explicitement par le bouton de l'utilisateur.
-    Génère une analyse experte approfondie via Google Gemini et persiste sur l'événement.
+    Génère une analyse via Google Gemini et persiste sur l'événement.
+    - Si photo_capturee est présente : Gemini Vision (analyse visuelle de l'image réelle).
+    - Sans photo : description factuelle transparente (étiquetée simulation ou synthèse texte).
     """
     zone_nom = evenement.zone.nom if evenement.zone else evenement.zone_nom_fallback
     heure_str = evenement.date_heure.strftime('%H:%M:%S')
 
-    analyse = AlertaAIService.generate_gemini_analysis(
+    analyse, source = AlertaAIService.generate_gemini_analysis(
         event_type=evenement.type,
         zone_nom=zone_nom,
         heure_str=heure_str,
         score_criticite=evenement.niveau_criticite,
         score_confiance=evenement.score_confiance,
-        personne_nom=evenement.personne_nom
+        personne_nom=evenement.personne_nom,
+        photo_capturee=evenement.photo_capturee
     )
 
     evenement.description = analyse
-    evenement.save(update_fields=['description'])
+    evenement.description_source = source
+    evenement.save(update_fields=['description', 'description_source'])
     return evenement
 
 
@@ -69,11 +73,12 @@ def creer_evenement(
     zone_nom_fallback='Entrée Principale',
     personne_nom='',
     score_confiance=0.85,
-    date_heure=None
+    date_heure=None,
+    photo_capturee=None
 ):
     """
     Point d'entrée de service pour le Module 2 (Médias & Vidéos) et pour l'API.
-    Traite la détection, évalue la gravité, reconstitue la scène via Hugging Face et persiste l'événement.
+    Traite la détection, évalue la gravité, associe le média réel et persiste l'événement.
     """
     if date_heure is None:
         date_heure = timezone.now()
@@ -86,7 +91,7 @@ def creer_evenement(
     niveau_criticite = evaluation['niveau_criticite']
     declencher_alerte = evaluation['alerte_declenchee']
 
-    # 2. Description initiale courte (la description de scène complète vient du bouton Gemini)
+    # 2. Description initiale courte (l'analyse complète Gemini se fait ensuite via le bouton)
     heure_str = date_heure.strftime('%H:%M:%S')
     description = AlertaAIService.generate_initial_description(
         event_type=type_event,
@@ -103,6 +108,8 @@ def creer_evenement(
         type=type_event,
         personne_nom=personne_nom,
         description=description,
+        description_source='simulation',
+        photo_capturee=photo_capturee,
         date_heure=date_heure,
         score_confiance=score_confiance,
         score_criticite=score_criticite,

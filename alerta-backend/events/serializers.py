@@ -29,6 +29,8 @@ class EvenementSerializer(serializers.ModelSerializer):
             'type_display',
             'personne_nom',
             'description',
+            'description_source',
+            'photo_capturee',
             'date_heure',
             'score_confiance',
             'score_criticite',
@@ -66,6 +68,7 @@ class EvenementCreateSerializer(serializers.ModelSerializer):
             'zone_nom_fallback',
             'type',
             'personne_nom',
+            'photo_capturee',
             'date_heure',
             'score_confiance',
         ]

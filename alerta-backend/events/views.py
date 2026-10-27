@@ -75,7 +75,8 @@ class EvenementListCreateView(generics.ListCreateAPIView):
             zone_nom_fallback=data.get('zone_nom_fallback', 'Entrée Principale'),
             personne_nom=data.get('personne_nom', ''),
             score_confiance=data.get('score_confiance', 0.85),
-            date_heure=data.get('date_heure', timezone.now())
+            date_heure=data.get('date_heure', timezone.now()),
+            photo_capturee=data.get('photo_capturee')
         )
 
         output_serializer = EvenementSerializer(evenement, context={'request': request})

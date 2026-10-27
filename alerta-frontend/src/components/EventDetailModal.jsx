@@ -13,6 +13,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   );
 
   const [description, setDescription] = useState(event.description || '');
+  const [currentDescriptionSource, setCurrentDescriptionSource] = useState(event.description_source || 'simulation');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [hasGeminiAnalyzed, setHasGeminiAnalyzed] = useState(Boolean(isDetailedDesc));
@@ -79,6 +80,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     try {
       const updated = await eventsApi.analyserAvecGemini(event.id);
       setDescription(updated.description);
+      setCurrentDescriptionSource(updated.description_source || 'simulation');
       setHasGeminiAnalyzed(true);
       if (onEventUpdated) {
         onEventUpdated(updated);
@@ -130,6 +132,35 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   const imageUrl = currentImageUrl;
   const isHfImage = currentImageSource === 'hf';
   const isOpenAiImage = currentImageSource === 'ia_ouverte';
+  const photoCaptureeUrl = event.photo_capturee
+    ? (event.photo_capturee.startsWith('http') ? event.photo_capturee : `http://127.0.0.1:8000${event.photo_capturee}`)
+    : null;
+
+  const getDescriptionBadge = () => {
+    const src = currentDescriptionSource;
+    if (src === 'gemini_vision') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          Gemini Vision (Image Réelle M2)
+        </span>
+      );
+    }
+    if (src === 'gemini_texte') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+          Synthèse Factuelle (Gemini)
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+        Scénario Simulé
+      </span>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -158,37 +189,66 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         {/* Contenu défilant */}
         <div className="p-6 overflow-y-auto space-y-6">
 
-          {/* RECONSTITUTION VISUELLE DE LA SCÈNE */}
-          <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt="Reconstitution visuelle de la scène"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="text-center p-6 text-slate-500">
-                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <p className="text-sm">Image illustrative en cours de génération</p>
+          {/* SECTION VISUELLE : CAPTURE RÉELLE (MODULE 2) ET/OU RECONSTITUTION IA */}
+          {photoCaptureeUrl ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Vraie capture caméra M2 */}
+                <div className="relative rounded-xl overflow-hidden bg-black border border-emerald-500/50 aspect-video flex items-center justify-center shadow-lg">
+                  <img src={photoCaptureeUrl} alt="Capture caméra réelle" className="w-full h-full object-cover" />
+                  <div className="absolute top-2 left-2 bg-slate-950/90 backdrop-blur-md px-2.5 py-0.5 rounded text-[10px] font-mono border border-emerald-500/50 text-emerald-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    Capture Réelle Caméra (Preuve M2)
+                  </div>
+                </div>
+
+                {/* 2. Reconstitution IA */}
+                <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+                  {imageUrl ? (
+                    <img src={imageUrl} alt="Reconstitution IA" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-center p-3 text-slate-500 text-xs">Reconstitution non demandée</div>
+                  )}
+                  <div className="absolute top-2 left-2 bg-slate-950/90 backdrop-blur-md px-2.5 py-0.5 rounded text-[10px] font-mono border border-cyan-500/40 text-cyan-300 flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                    Reconstitution IA (FLUX.1)
+                  </div>
+                </div>
               </div>
-            )}
-
-            {/* Bandeau d'information Reconstitution */}
-            <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono border flex items-center gap-2 border-cyan-500/40 text-cyan-300">
-              <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-              {isHfImage
-                ? 'Reconstitution IA (Hugging Face)'
-                : isOpenAiImage
-                ? 'Reconstitution IA (Moteur FLUX.1)'
-                : 'Reconstitution de la scène (Simulation)'}
             </div>
+          ) : (
+            /* Mode sans capture attachée : affichage de la reconstitution */
+            <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt="Reconstitution visuelle de la scène"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-center p-6 text-slate-500">
+                  <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-sm">Image illustrative en cours de génération</p>
+                </div>
+              )}
 
-            <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
-              Zone : {event.zone_nom || event.zone_nom_fallback || 'Secteur'} • Image illustrative
+              {/* Bandeau d'information Reconstitution */}
+              <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono border flex items-center gap-2 border-cyan-500/40 text-cyan-300">
+                <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                {isHfImage
+                  ? 'Reconstitution IA (Hugging Face)'
+                  : isOpenAiImage
+                  ? 'Reconstitution IA (Moteur FLUX.1)'
+                  : 'Reconstitution de la scène (Simulation)'}
+              </div>
+
+              <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
+                Zone : {event.zone_nom || event.zone_nom_fallback || 'Secteur'} • Reconstitution illustrative
+              </div>
             </div>
-          </div>
+          )}
 
           {/* SECTION ANALYSE IA GEMINI (DÉCLENCHÉE AVEC LE BOUTON) */}
           <div className="p-5 rounded-xl bg-gradient-to-r from-slate-900 to-[#0e1a38] border border-cyan-500/30 shadow-lg">
@@ -197,15 +257,10 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                 <svg className="w-4 h-4 text-[#00C2CB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Analyse & Recommandation Gemini
+                Analyse & Description de Scène
               </div>
 
-              {hasGeminiAnalyzed && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  Analysé par Gemini IA
-                </span>
-              )}
+              {hasGeminiAnalyzed && getDescriptionBadge()}
             </div>
 
             {/* Texte de description ou analyse */}

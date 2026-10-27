@@ -32,96 +32,112 @@ class AlertaAIService:
     """Service centralisé pour les fonctionnalités IA du Module 3."""
 
     @classmethod
-    def generate_gemini_analysis(cls, event_type, zone_nom, heure_str, score_criticite, score_confiance, personne_nom=None):
+    def generate_gemini_analysis(cls, event_type, zone_nom, heure_str, score_criticite, score_confiance, personne_nom=None, photo_capturee=None):
         """
-        Génère une description de scène réaliste via l'API Google Gemini.
-        Appelé explicitement via le bouton utilisateur dans la modale.
-        La description est focalisée sur CE QUI S'EST PASSÉ concrètement dans la scène,
-        sans termes techniques (pas de score, pas de modèle prédictif, pas de recommandation générique).
+        Génère une description de scène via l'API Google Gemini :
+        - Si une photo réelle (photo_capturee) est fournie : appelle Gemini Vision multimodal
+          en lui demandant de décrire UNIQUEMENT ce qui est directement visible sur l'image.
+          description_source = 'gemini_vision'
+        - Sans photo : génère une synthèse factuelle textuelle sobre.
+          description_source = 'gemini_texte' (ou 'simulation' en repli local)
+        Retourne : (description: str, description_source: str)
         """
+        import base64
         gemini_key = _get_key('GEMINI_API_KEY', 'GEMINI_API_KEY')
 
-        if event_type in ['inconnu', 'visage_inconnu']:
-            situation = f"une personne non reconnue a été détectée dans la zone « {zone_nom} » à {heure_str}"
-            consigne = "Décris concrètement ce que la caméra aurait capturé : les gestes, l'attitude, le comportement de la personne, l'ambiance de la scène. Sois précis et visuel."
-        elif event_type == 'visage_connu':
-            nom = personne_nom or 'un résident connu'
-            situation = f"{nom} a été identifié(e) dans la zone « {zone_nom} » à {heure_str}"
-            consigne = "Décris le passage normal de cette personne : son allure, ses gestes, ce que la caméra aurait capturé au moment de son entrée."
-        else:
-            situation = f"un mouvement inhabituel a été détecté dans la zone « {zone_nom} » à {heure_str}"
-            consigne = "Décris ce que la caméra aurait capturé : la nature du mouvement, l'origine possible, l'ambiance visuelle de la scène."
-
-        prompt = (
-            f"Tu es une IA de reconstitution de scène de sécurité. "
-            f"Situation détectée : {situation}. "
-            f"{consigne} "
-            f"Réponds UNIQUEMENT avec 2 à 3 phrases de description de scène. "
-            f"N'inclus PAS de score, de pourcentage, de niveau de criticité, ni de recommandation. "
-            f"Écris comme si tu décrivais une image que tu vois."
-        )
-
-        if gemini_key:
-            # 1. Tentative avec l'API v1beta/interactions
+        # ─── Cas 1 : Vraie photo disponible ➔ GEMINI VISION MULTIMODAL ────────────
+        if photo_capturee and gemini_key:
             try:
-                url_interactions = "https://generativelanguage.googleapis.com/v1beta/interactions"
-                headers = {'x-goog-api-key': gemini_key, 'Content-Type': 'application/json'}
-                payload = {'model': 'gemini-3.8-flash', 'input': prompt}
-                res = requests.post(url_interactions, headers=headers, json=payload, timeout=6)
-                if res.status_code == 200:
-                    data = res.json()
-                    output_text = data.get('output_text') or data.get('output', {}).get('text') or ''
-                    if output_text:
-                        print("[Gemini Interactions] Analyse generee avec succes")
-                        return output_text.strip()
-            except Exception as e:
-                print(f"[Gemini Interactions] Exception: {e}")
+                # Lecture des octets de la photo
+                photo_capturee.seek(0)
+                image_bytes = photo_capturee.read()
+                b64_img = base64.b64encode(image_bytes).decode('utf-8')
+                mime_type = "image/png" if getattr(photo_capturee, 'name', '').lower().endswith('.png') else "image/jpeg"
 
-            # 2. Tentative avec v1beta generateContent
+                vision_prompt = (
+                    f"Tu es l'agent de vision IA du système de sécurité Alerta. "
+                    f"Analyse cette capture de vidéosurveillance issue de la zone « {zone_nom} » (enregistrée à {heure_str}). "
+                    f"Règle absolue : décris UNIQUEMENT et fidèlement ce qui est visible sur cette image "
+                    f"(présence d'individus, posture, allure, tenue ou accessoires visibles, luminosité et contexte immédiat). "
+                    f"N'invente rien qui ne soit pas directement observable. "
+                    f"Formule une description professionnelle et sobre en français (2 à 3 phrases maximum)."
+                )
+
+                for model_candidate in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']:
+                    url_gen = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={gemini_key}"
+                    payload_gen = {
+                        "contents": [{
+                            "parts": [
+                                {
+                                    "inlineData": {
+                                        "mimeType": mime_type,
+                                        "data": b64_img
+                                    }
+                                },
+                                {"text": vision_prompt}
+                            ]
+                        }],
+                        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 300}
+                    }
+                    res = requests.post(url_gen, json=payload_gen, timeout=10)
+                    if res.status_code == 200:
+                        data = res.json()
+                        desc = data['candidates'][0]['content']['parts'][0]['text'].strip()
+                        print(f"[Gemini Vision] Analyse de l'image réelle effectuée avec succès via {model_candidate}")
+                        return desc, 'gemini_vision'
+            except Exception as e:
+                print(f"[Gemini Vision Erreur] {e}")
+
+        # ─── Cas 2 : Pas de photo ➔ GEMINI TEXTE (synthèse factuelle) ─────────────
+        if gemini_key:
+            if event_type in ['inconnu', 'visage_inconnu']:
+                situation = f"une personne non reconnue a été détectée dans la zone « {zone_nom} » à {heure_str}"
+            elif event_type == 'visage_connu':
+                nom = personne_nom or 'un résident autorisé'
+                situation = f"{nom} a été identifié(e) dans la zone « {zone_nom} » à {heure_str}"
+            else:
+                situation = f"un mouvement a été capté dans la zone « {zone_nom} » à {heure_str}"
+
+            text_prompt = (
+                f"Tu es le système d'alerte de sécurité Alerta. "
+                f"Incident : {situation}. "
+                f"Aucune image n'est attachée à cet événement. "
+                f"Rédige une notification factuelle et sobre en français (2 phrases maximum). "
+                f"N'invente pas d'action détaillée (pas de vêtements imaginaires, pas de gestes non prouvés)."
+            )
+
             try:
                 for model_candidate in ['gemini-2.5-flash', 'gemini-1.5-flash']:
                     url_gen = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={gemini_key}"
                     payload_gen = {
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 300}
+                        "contents": [{"parts": [{"text": text_prompt}]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 200}
                     }
                     res2 = requests.post(url_gen, json=payload_gen, timeout=5)
                     if res2.status_code == 200:
                         data2 = res2.json()
                         desc = data2['candidates'][0]['content']['parts'][0]['text'].strip()
-                        print(f"[Gemini Content] Analyse generee avec {model_candidate}")
-                        return desc
+                        print(f"[Gemini Texte] Synthèse factuelle générée avec {model_candidate}")
+                        return desc, 'gemini_texte'
             except Exception as e:
-                print(f"[Gemini Content] Exception: {e}")
+                print(f"[Gemini Texte Erreur] {e}")
 
-        # 3. Fallback : description de scène contextuelle sans API
-        print("[Gemini AI] Utilisation du moteur de description de scene Alerta.")
-        return cls._generate_scene_description(event_type, zone_nom, heure_str, personne_nom)
+        # ─── Cas 3 : Repli local sans API ➔ SCÉNARIO SIMULÉ EXPLICITE ─────────────
+        print("[Alerta Local] Génération d'une description factuelle de simulation.")
+        return cls._generate_scene_description(event_type, zone_nom, heure_str, personne_nom), 'simulation'
 
     @classmethod
     def _generate_scene_description(cls, event_type, zone_nom, heure_str, personne_nom):
         """
-        Fallback sans API : génère une description de scène réaliste et contextuelle.
-        Focalisée sur CE QUI SE PASSE dans la scène, sans termes techniques.
+        Génère une description factuelle et honnête sans extrapolation imaginaire.
+        Utilisé lorsque aucune capture réelle n'est soumise à l'analyse visuelle.
         """
-        import random
         if event_type == 'visage_connu' and personne_nom:
-            scenes = [
-                f"La caméra de la zone « {zone_nom} » a capturé {personne_nom} franchissant l'accès à {heure_str}. La démarche est assurée, le passage rapide et direct vers l'intérieur. Rien d'inhabituel dans le comportement observé.",
-                f"À {heure_str}, {personne_nom} est entré(e) dans la zone « {zone_nom} ». La silhouette est reconnaissable immédiatement, le mouvement calme et familier. La porte s'est refermée normalement derrière la personne.",
-            ]
+            return f"Passage autorisé : {personne_nom} a été identifié(e) dans la zone « {zone_nom} » à {heure_str} (accès normal validé)."
         elif event_type in ['inconnu', 'visage_inconnu']:
-            scenes = [
-                f"La caméra de « {zone_nom} » a enregistré une silhouette inconnue à {heure_str}. La personne longe le mur, le capuchon relevé, les mouvements lents et furtifs. Elle marque une pause avant de se diriger vers l'intérieur.",
-                f"À {heure_str}, une personne non identifiée est apparue dans le champ de « {zone_nom} ». Le comportement est hésitant : regards répétés vers les caméras, déplacements irréguliers. La présence semble non planifiée.",
-                f"La scène capturée dans « {zone_nom} » à {heure_str} montre un individu dont le visage n'est pas dans la base. Il s'approche de la zone d'accès, vérifie les alentours, et tente d'ouvrir une porte.",
-            ]
+            return f"Alerte détection : Présence d'un individu non répertorié dans la zone « {zone_nom} » à {heure_str}. Vérification visuelle recommandée."
         else:
-            scenes = [
-                f"La caméra de « {zone_nom} » a détecté un mouvement à {heure_str}. Une ombre traverse rapidement le cadre, probablement causée par un objet déplacé ou une ouverture de porte. La zone redevient calme immédiatement après.",
-                f"À {heure_str}, un déplacement inattendu a été capturé dans « {zone_nom} ». Le mouvement est bref, de faible amplitude, et pourrait correspondre au passage d'un animal ou à un élément extérieur.",
-            ]
-        return random.choice(scenes)
+            return f"Détection cinématique : Mouvement inhabituel intercepté dans le secteur « {zone_nom} » à {heure_str}."
 
     @classmethod
     def generate_initial_description(cls, event_type, zone_nom, heure_str, personne_nom=None):
