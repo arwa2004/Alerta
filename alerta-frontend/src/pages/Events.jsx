@@ -7,6 +7,7 @@ export default function Events() {
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [simulating, setSimulating] = useState(false);
+  const [photoCapturee, setPhotoCapturee] = useState(null);
 
   // Filtres
   const [typeFilter, setTypeFilter] = useState('');
@@ -54,7 +55,11 @@ export default function Events() {
   const handleSimulate = async (scenario) => {
     setSimulating(true);
     try {
-      const newEv = await eventsApi.simulateEvenement(scenario);
+      const payload = photoCapturee
+        ? { scenario, photo_capturee: photoCapturee }
+        : scenario;
+      const newEv = await eventsApi.simulateEvenement(payload);
+      setPhotoCapturee(null);
       // Rechargement immédiat
       await fetchEvents();
       setSelectedEvent(newEv);
@@ -119,32 +124,57 @@ export default function Events() {
           </div>
 
           {/* Boutons de simulation de scénario */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 hidden sm:inline">Simuler :</span>
-            <button
-              onClick={() => handleSimulate('inconnu')}
-              disabled={simulating}
-              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-              + Inconnu
-            </button>
-            <button
-              onClick={() => handleSimulate('visage_connu')}
-              disabled={simulating}
-              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              + Visage Connu
-            </button>
-            <button
-              onClick={() => handleSimulate('mouvement')}
-              disabled={simulating}
-              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-              + Mouvement
-            </button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {/* Input upload photo pour simuler une capture caméra du Module 2 */}
+            <div className="flex items-center gap-2 bg-[#111a36] px-3 py-1.5 rounded-xl border border-slate-700/80">
+              <label className="text-xs text-cyan-400 font-semibold cursor-pointer flex items-center gap-1.5 hover:text-cyan-300">
+                <span>📷 {photoCapturee ? photoCapturee.name.slice(0, 15) + '...' : 'Attacher une photo'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setPhotoCapturee(e.target.files[0] || null)}
+                  className="hidden"
+                />
+              </label>
+              {photoCapturee && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoCapturee(null)}
+                  className="text-slate-400 hover:text-rose-400 text-xs font-bold"
+                  title="Retirer la photo"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 hidden sm:inline">Simuler :</span>
+              <button
+                onClick={() => handleSimulate('inconnu')}
+                disabled={simulating}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                + Inconnu
+              </button>
+              <button
+                onClick={() => handleSimulate('visage_connu')}
+                disabled={simulating}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                + Visage Connu
+              </button>
+              <button
+                onClick={() => handleSimulate('mouvement')}
+                disabled={simulating}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                + Mouvement
+              </button>
+            </div>
           </div>
         </div>
 
