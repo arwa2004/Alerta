@@ -70,8 +70,37 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           >
             Accueil
           </button>
+          {/* Module 1 : Zones & Visages */}
+          <button
+            onClick={() => {
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
+              if (setActiveTab) setActiveTab('zones');
+            }}
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+              activeTab === 'zones'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Zones & Visages
+          </button>
 
-          {/* Bouton Événements (Module 3) accessible pour tous */}
+          {/* Module 2 : Médias */}
+          <button
+            onClick={() => {
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
+              if (setActiveTab) setActiveTab('medias');
+            }}
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+              activeTab === 'medias'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Médias
+          </button>
+
+          {/* Module 3 : Événements */}
           <button
             onClick={() => navigate('/events')}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold flex items-center gap-2 ${
@@ -83,7 +112,6 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
             <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             <span>Événements</span>
           </button>
-
           {/* Bouton Dashboard Admin UNIQUEMENT visible par les administrateurs */}
           {isAdmin && (
             <button

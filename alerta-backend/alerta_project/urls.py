@@ -1,4 +1,4 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -28,17 +28,17 @@ def api_home(request):
     </head>
     <body>
         <div class="card">
-            <span class="badge">● Backend En Ligne</span>
+            <span class="badge">â— Backend En Ligne</span>
             <h1>Alerta API</h1>
             <p>Le serveur backend Django fonctionne parfaitement. Pour utiliser l'application graphique Alerta, ouvrez le frontend React.</p>
             <div class="links">
                 <a class="btn btn-primary" href="http://localhost:5173" target="_blank">
                     <span>Ouvrir l'application Web (Frontend)</span>
-                    <span>→</span>
+                    <span>â†’</span>
                 </a>
                 <a class="btn btn-secondary" href="/admin/">
                     <span>Panneau Django Admin</span>
-                    <span>→</span>
+                    <span>â†’</span>
                 </a>
             </div>
         </div>
@@ -51,6 +51,8 @@ urlpatterns = [
     path('', api_home, name='api-home'),
     path('admin/', admin.site.urls),
     path('api/auth/', include('users.urls')),
+    path('api/recognition/', include('recognition.urls')),
+    path('api/medias/', include('medias.urls')),
     path('api/', include('events.urls')),
 ]
 

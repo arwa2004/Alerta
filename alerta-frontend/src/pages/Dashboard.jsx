@@ -7,7 +7,8 @@ import eventsApi from '../api/eventsApi';
 import AdminDashboard from './AdminDashboard';
 import UserSettings from '../components/UserSettings';
 import EventDetailModal from '../components/EventDetailModal';
-
+import RecognitionModule from '../components/recognition/RecognitionModule';
+import Medias from './Medias';
 export default function Dashboard({ initialTab = 'accueil' }) {
   const {
     user,
@@ -510,8 +511,20 @@ export default function Dashboard({ initialTab = 'accueil' }) {
           </div>
         </div>
       )}
-
-
+{activeTab === 'zones' && (
+  <div className="flex-1 py-8">
+    <div className="max-w-6xl mx-auto px-6">
+      <RecognitionModule />
+    </div>
+  </div>
+)}
+      {activeTab === 'medias' && (
+        <div className="flex-1 py-8">
+          <div className="max-w-6xl mx-auto px-6">
+            <Medias onGoZones={() => setActiveTab('zones')} />
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════ ONGLET 2 : PARAMÈTRES DU COMPTE ═════════════════════════ */}
       {activeTab === 'parametres' && (
