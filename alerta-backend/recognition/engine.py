@@ -20,11 +20,11 @@ def _fr():
     return face_recognition
 
 
-def locate_faces(rgb_array, upsample=2):
+def locate_faces(rgb_array, upsample=1):
     """Liste de (top, right, bottom, left).
 
-    upsample=2 permet de détecter des visages plus petits (personnes éloignées)
-    au prix d'un temps de traitement légèrement supérieur.
+    upsample=1 est un bon compromis vitesse/précision pour les vidéos.
+    upsample=2 détecte mieux les visages lointains mais double le temps.
     """
     return _fr().face_locations(rgb_array, number_of_times_to_upsample=upsample, model='hog')
 
