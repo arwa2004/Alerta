@@ -1,18 +1,18 @@
-from django.db import models
+﻿from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
 class Zone(models.Model):
     """
-    Zone surveillée par les caméras Alerta (ex: Salon, Entrée, Jardin).
-    Permet l'intégration fluide avec le Module 1 de l'équipe.
+    Zone surveillÃ©e par les camÃ©ras Alerta (ex: Salon, EntrÃ©e, Jardin).
+    Permet l'intÃ©gration fluide avec le Module 1 de l'Ã©quipe.
     """
     nom = models.CharField(max_length=100)
     description = models.TextField(blank=True, default='')
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='zones'
+        related_name='events_zones'
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -25,9 +25,9 @@ class Zone(models.Model):
 
 class Evenement(models.Model):
     """
-    Modèle central du Module 3 : Événements de surveillance détectés.
-    Stocke la description générée par IA (Gemini), la reconstitution visuelle
-    (Hugging Face), et le score de criticité calculé par Machine Learning.
+    ModÃ¨le central du Module 3 : Ã‰vÃ©nements de surveillance dÃ©tectÃ©s.
+    Stocke la description gÃ©nÃ©rÃ©e par IA (Gemini), la reconstitution visuelle
+    (Hugging Face), et le score de criticitÃ© calculÃ© par Machine Learning.
     """
     TYPE_CHOICES = [
         ('mouvement', 'Mouvement suspect'),
@@ -37,21 +37,21 @@ class Evenement(models.Model):
 
     STATUT_IA_CHOICES = [
         ('en_attente', 'En attente'),
-        ('ok', 'Généré avec succès'),
-        ('erreur', 'Échec génération'),
+        ('ok', 'GÃ©nÃ©rÃ© avec succÃ¨s'),
+        ('erreur', 'Ã‰chec gÃ©nÃ©ration'),
     ]
 
     NIVEAU_CRITICITE_CHOICES = [
         ('faible', 'Faible'),
         ('moyen', 'Moyen'),
-        ('eleve', 'Élevé'),
+        ('eleve', 'Ã‰levÃ©'),
     ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='evenements',
-        verbose_name="Propriétaire"
+        verbose_name="PropriÃ©taire"
     )
     zone = models.ForeignKey(
         Zone,
@@ -59,39 +59,39 @@ class Evenement(models.Model):
         null=True,
         blank=True,
         related_name='evenements',
-        verbose_name="Zone surveillée"
+        verbose_name="Zone surveillÃ©e"
     )
     zone_nom_fallback = models.CharField(
         max_length=100,
         blank=True,
-        default='Entrée Principale',
-        help_text="Nom de la zone si aucune zone FK n'est sélectionnée"
+        default='EntrÃ©e Principale',
+        help_text="Nom de la zone si aucune zone FK n'est sÃ©lectionnÃ©e"
     )
 
     type = models.CharField(
         max_length=30,
         choices=TYPE_CHOICES,
         default='mouvement',
-        verbose_name="Type d'événement"
+        verbose_name="Type d'Ã©vÃ©nement"
     )
 
     personne_nom = models.CharField(
         max_length=120,
         blank=True,
         default='',
-        verbose_name="Personne identifiée (Module 1)"
+        verbose_name="Personne identifiÃ©e (Module 1)"
     )
 
     description = models.TextField(
         blank=True,
         default='',
-        verbose_name="Description générée (Gemini)"
+        verbose_name="Description gÃ©nÃ©rÃ©e (Gemini)"
     )
 
     DESCRIPTION_SOURCE_CHOICES = [
-        ('gemini_vision', 'Gemini Vision (Image réelle)'),
-        ('gemini_texte', 'Synthèse Gemini'),
-        ('simulation', 'Scénario simulé'),
+        ('gemini_vision', 'Gemini Vision (Image rÃ©elle)'),
+        ('gemini_texte', 'SynthÃ¨se Gemini'),
+        ('simulation', 'ScÃ©nario simulÃ©'),
     ]
 
     description_source = models.CharField(
@@ -105,12 +105,12 @@ class Evenement(models.Model):
         upload_to='events/captures/',
         blank=True,
         null=True,
-        verbose_name="Photo réelle capturée (Module 2)"
+        verbose_name="Photo rÃ©elle capturÃ©e (Module 2)"
     )
 
     date_heure = models.DateTimeField(
         default=timezone.now,
-        verbose_name="Date et heure de détection"
+        verbose_name="Date et heure de dÃ©tection"
     )
 
     score_confiance = models.FloatField(
@@ -120,19 +120,19 @@ class Evenement(models.Model):
 
     score_criticite = models.FloatField(
         default=0.0,
-        verbose_name="Score de criticité ML (0.0 - 1.0)"
+        verbose_name="Score de criticitÃ© ML (0.0 - 1.0)"
     )
 
     niveau_criticite = models.CharField(
         max_length=20,
         choices=NIVEAU_CRITICITE_CHOICES,
         default='faible',
-        verbose_name="Niveau de criticité"
+        verbose_name="Niveau de criticitÃ©"
     )
 
     IMAGE_SOURCE_CHOICES = [
         ('hf', 'Hugging Face (FLUX.1)'),
-        ('ia_ouverte', 'IA Générative Ouverte (FLUX.1)'),
+        ('ia_ouverte', 'IA GÃ©nÃ©rative Ouverte (FLUX.1)'),
         ('simulation', 'Simulation locale'),
     ]
 
@@ -159,7 +159,7 @@ class Evenement(models.Model):
 
     alerte_declenchee = models.BooleanField(
         default=False,
-        verbose_name="Alerte déclenchée vers Module 4"
+        verbose_name="Alerte dÃ©clenchÃ©e vers Module 4"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -167,8 +167,8 @@ class Evenement(models.Model):
 
     class Meta:
         ordering = ['-date_heure']
-        verbose_name = "Événement"
-        verbose_name_plural = "Événements"
+        verbose_name = "Ã‰vÃ©nement"
+        verbose_name_plural = "Ã‰vÃ©nements"
 
     def __str__(self):
         zone_str = self.zone.nom if self.zone else self.zone_nom_fallback
