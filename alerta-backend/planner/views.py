@@ -6,6 +6,10 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .services.digital_twin import simulate_custom_cameras
 
 from .models import (
     FloorPlan, Project, FloorPlanAnalysis, CameraOptimization
@@ -324,3 +328,19 @@ class OptimizationDetailView(APIView):
             return Response({"detail": "Not found."},
                             status=status.HTTP_404_NOT_FOUND)
         return Response(CameraOptimizationSerializer(opt).data)
+class DigitalTwinSimulateView(APIView):
+    """
+    Endpoint pour le jumeau numérique. 
+    Reçoit les caméras déplacées par l'utilisateur et renvoie leurs zones de vision.
+    """
+    def post(self, request):
+        data = request.data
+        cleaned_image_b64 = data.get('cleaned_image_b64')
+        custom_cameras = data.get('cameras', [])
+        image_width = data.get('image_width', 1600)
+
+        if not cleaned_image_b64:
+            return Response({"error": "Missing floor plan image data"}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = simulate_custom_cameras(cleaned_image_b64, custom_cameras, image_width)
+        return Response(result, status=status.HTTP_200_OK)

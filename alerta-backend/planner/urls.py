@@ -1,5 +1,8 @@
 from django.urls import path
-
+from django.urls import path
+from . import views
+# Ajoute cette ligne :
+from .views import DigitalTwinSimulateView
 from .views import (
     # Existing
     FloorPlanDetailView,
@@ -51,4 +54,5 @@ urlpatterns = [
     path('optimizations/<int:optimization_id>/',
          OptimizationDetailView.as_view(),
          name='optimization-detail'),
+     path('digital-twin/simulate/', DigitalTwinSimulateView.as_view(), name='digital-twin-simulate'),
 ]

@@ -15,15 +15,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Variables d'environnement : fichier alerta-backend/.env (voir .env.example)
 load_dotenv(BASE_DIR / '.env')
-# Chargement automatique et robuste du fichier .env sans dÃ©pendance externe
-env_file = BASE_DIR / '.env'
-if env_file.exists():
-    with open(env_file, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, val = line.split('=', 1)
-                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = os.environ.get(
@@ -63,7 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # En tÃªte pour gÃ©rer les requÃªtes prÃ©liminaires (OPTIONS / CORS)
+    'corsheaders.middleware.CorsMiddleware',  # En tête pour gérer les requêtes préliminaires (OPTIONS / CORS)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -109,12 +100,8 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {'timeout': 20},
         }
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        "OPTIONS": {"timeout": 20},
     }
 
 # Password validation
@@ -142,7 +129,7 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# ModÃ¨le Utilisateur personnalisÃ©
+# Modèle Utilisateur personnalisé
 AUTH_USER_MODEL = 'users.User'
 
 # Static files (CSS, JavaScript, Images)
@@ -162,12 +149,12 @@ REST_FRAMEWORK = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Email backend (console pour dÃ©veloppement & tests, imprimÃ© dans le terminal)
+# Email backend (console pour développement & tests, imprimé dans le terminal)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'Alerta Security <noreply@alerta.tn>'
 
-# â”€â”€â”€ ClÃ©s API IA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Lecture sÃ©curisÃ©e depuis l'environnement ou configuration locale
+# ─── Clés API IA ─────────────────────────────────────────────────────────────
+# Lecture sécurisée depuis l'environnement ou configuration locale
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'VOTRE_CLE_GEMINI_ICI')
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
 HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY', os.environ.get('HF_TOKEN', 'VOTRE_CLE_HUGGINGFACE_ICI'))
@@ -202,6 +189,5 @@ PLANNER_MAX_UPLOAD_MB = int(os.environ.get('PLANNER_MAX_UPLOAD_MB', '20'))
 PLANNER_MAX_PDF_PAGES = int(os.environ.get('PLANNER_MAX_PDF_PAGES', '50'))
 PLANNER_RENDER_DPI = int(os.environ.get('PLANNER_RENDER_DPI', '150'))
 PLANNER_MAX_RENDER_PIXELS = int(os.environ.get('PLANNER_MAX_RENDER_PIXELS', '4000'))  # plus grand côté
-# Seuil de nettetÃ© minimale pour l'enrÃ´lement biomÃ©trique (adaptÃ© vidÃ©osurveillance)
+# Seuil de netteté minimale pour l'enrôlement biométrique (adapté vidéosurveillance)
 RECOGNITION_MIN_SHARPNESS = 2.0
-
