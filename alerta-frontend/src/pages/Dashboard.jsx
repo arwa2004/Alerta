@@ -1,10 +1,14 @@
 import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import axiosClient from '../api/axiosClient';
+import eventsApi from '../api/eventsApi';
 import AdminDashboard from './AdminDashboard';
 import UserSettings from '../components/UserSettings';
-
+import EventDetailModal from '../components/EventDetailModal';
+import RecognitionModule from '../components/recognition/RecognitionModule';
+import Medias from './Medias';
 export default function Dashboard({ initialTab = 'accueil' }) {
   const {
     user,
@@ -16,10 +20,51 @@ export default function Dashboard({ initialTab = 'accueil' }) {
     disable2FA,
     deleteAccount,
   } = useContext(AuthContext);
+  const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
 
   // Onglet actif : 'accueil', 'parametres'
   const [activeTab, setActiveTab] = useState('accueil');
+
+  // ─── Module 3 : Dashboard Événements & Stats ──────────────────────────────
+  const [eventsStats, setEventsStats] = useState({
+    total_evenements: 0,
+    evenements_aujourdhui: 0,
+    inconnus_count: 0,
+    visages_connus_count: 0,
+    mouvements_count: 0,
+    critiques_count: 0,
+    alertes_count: 0,
+    derniers_evenements: [],
+  });
+  const [selectedEventModal, setSelectedEventModal] = useState(null);
+  const [isSimulatingEvent, setIsSimulatingEvent] = useState(false);
+
+  const fetchEventsStats = async () => {
+    try {
+      const data = await eventsApi.getDashboardStats();
+      setEventsStats(data);
+    } catch (err) {
+      console.error('Erreur chargement dashboard stats', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchEventsStats();
+  }, []);
+
+  const handleQuickSimulate = async (scenario = 'inconnu') => {
+    setIsSimulatingEvent(true);
+    try {
+      const newEv = await eventsApi.simulateEvenement(scenario);
+      await fetchEventsStats();
+      setSelectedEventModal(newEv);
+    } catch (err) {
+      console.error('Erreur simulation', err);
+    } finally {
+      setIsSimulatingEvent(false);
+    }
+  };
 
   // ─── Profil ───────────────────────────────────────────────────────────────
   const [profileData, setProfileData] = useState({ first_name: user?.first_name || '', last_name: user?.last_name || '' });
@@ -188,6 +233,163 @@ export default function Dashboard({ initialTab = 'accueil' }) {
             </div>
           </div>
 
+          {/* ── Section : Compteurs & Dernières Détections (Module 3) ── */}
+          <div className="max-w-6xl mx-auto px-8 md:px-12 -mt-8 relative z-10 mb-12">
+            {/* 3 Compteurs Clés */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Compteur 1 : Total */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-lg flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Détections</p>
+                  <p className="text-3xl font-extrabold text-[#0B1F3A]">{eventsStats.total_evenements || 0}</p>
+                  <span className="text-[11px] text-cyan-700 font-semibold mt-1 inline-block">
+                    ● {eventsStats.evenements_aujourdhui || 0} aujourd'hui
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Compteur 2 : Inconnus & Alertes Critiques (Rouge) */}
+              <div className="bg-white rounded-2xl p-6 border border-rose-100 shadow-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inconnus & Alertes</p>
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-rose-600">
+                    {(eventsStats.inconnus_count || 0) + (eventsStats.mouvements_count || 0)}
+                  </p>
+                  <span className="text-[11px] text-rose-600 font-semibold mt-1 inline-block">
+                    {eventsStats.critiques_count || 0} critiques (ML)
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Compteur 3 : Visages Reconnus (Vert) */}
+              <div className="bg-white rounded-2xl p-6 border border-emerald-100 shadow-lg flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Visages Identifiés</p>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-emerald-600">
+                    {eventsStats.visages_connus_count || 0}
+                  </p>
+                  <span className="text-[11px] text-emerald-700 font-semibold mt-1 inline-block">
+                    Membres autorisés
+                  </span>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Carte des Derniers Événements avec pastilles */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 md:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-[#0B1F3A]">Dernières Détections Alerta</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-100 text-cyan-800">Module 3</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Pastilles colorées : Vert = Visage Connu, Rouge = Mouvement / Inconnu
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleQuickSimulate('inconnu')}
+                    disabled={isSimulatingEvent}
+                    className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition shadow-sm disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>⚡ Simuler Détection</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/events')}
+                    className="px-3.5 py-2 text-xs font-bold rounded-xl bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Tout voir</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Liste des 5 événements */}
+              {!eventsStats.derniers_evenements || eventsStats.derniers_evenements.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  Aucun événement récent enregistré.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {eventsStats.derniers_evenements.slice(0, 5).map((ev) => {
+                    const isKnown = ev.type === 'visage_connu';
+                    return (
+                      <div
+                        key={ev.id}
+                        onClick={() => setSelectedEventModal(ev)}
+                        className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50 rounded-xl px-3 transition cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {/* Pastille colorée conforme à la règle */}
+                          <span
+                            className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${
+                              isKnown ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-rose-500 shadow-rose-500/30'
+                            } shadow-md`}
+                            title={isKnown ? 'Visage connu' : 'Mouvement ou Inconnu'}
+                          ></span>
+
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">
+                              {ev.description || `${ev.type_display} - ${ev.zone_nom}`}
+                            </p>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                              <span>📍 {ev.zone_nom || ev.zone_nom_fallback}</span>
+                              <span>•</span>
+                              <span>
+                                {new Date(ev.date_heure).toLocaleTimeString('fr-FR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                              ev.niveau_criticite === 'eleve'
+                                ? 'bg-rose-100 text-rose-700'
+                                : ev.niveau_criticite === 'moyen'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            Score: {Math.round(ev.score_criticite * 100)}%
+                          </span>
+                          <span className="text-slate-400 text-xs">Détails →</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* ── Section : Ce qu'Alerta fait pour vous (3 technologies clés) ── */}
           <div className="max-w-6xl mx-auto px-8 md:px-12 py-14">
             <div className="text-center mb-12">
@@ -309,8 +511,20 @@ export default function Dashboard({ initialTab = 'accueil' }) {
           </div>
         </div>
       )}
-
-
+{activeTab === 'zones' && (
+  <div className="flex-1 py-8">
+    <div className="max-w-6xl mx-auto px-6">
+      <RecognitionModule />
+    </div>
+  </div>
+)}
+      {activeTab === 'medias' && (
+        <div className="flex-1 py-8">
+          <div className="max-w-6xl mx-auto px-6">
+            <Medias onGoZones={() => setActiveTab('zones')} />
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════ ONGLET 2 : PARAMÈTRES DU COMPTE ═════════════════════════ */}
       {activeTab === 'parametres' && (
@@ -327,6 +541,13 @@ export default function Dashboard({ initialTab = 'accueil' }) {
             />
           </div>
         </div>
+      )}
+      {/* Modal de Détail Événement */}
+      {selectedEventModal && (
+        <EventDetailModal
+          event={selectedEventModal}
+          onClose={() => setSelectedEventModal(null)}
+        />
       )}
     </div>
   );

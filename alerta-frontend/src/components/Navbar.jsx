@@ -1,9 +1,12 @@
 import { useContext, useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
   const { user, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const dropdownRef = useRef(null);
@@ -56,16 +59,60 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
         <div className="flex items-center gap-2">
           {/* Bouton Accueil pour tout le monde */}
           <button
-            onClick={() => setActiveTab && setActiveTab('accueil')}
+            onClick={() => {
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
+              if (setActiveTab) setActiveTab('accueil');
+            }}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
-              activeTab === 'accueil'
+              location.pathname === '/dashboard' && activeTab === 'accueil'
                 ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
             Accueil
           </button>
+          {/* Module 1 : Zones & Visages */}
+          <button
+            onClick={() => {
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
+              if (setActiveTab) setActiveTab('zones');
+            }}
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+              activeTab === 'zones'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Zones & Visages
+          </button>
 
+          {/* Module 2 : Médias */}
+          <button
+            onClick={() => {
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
+              if (setActiveTab) setActiveTab('medias');
+            }}
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
+              activeTab === 'medias'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Médias
+          </button>
+
+          {/* Module 3 : Événements */}
+          <button
+            onClick={() => navigate('/events')}
+            className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold flex items-center gap-2 ${
+              location.pathname === '/events'
+                ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
+                : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+            <span>Événements</span>
+          </button>
           {/* Planificateur de caméras (Phase 1) */}
           <Link
             to="/planner"
@@ -81,9 +128,12 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           {/* Bouton Dashboard Admin UNIQUEMENT visible par les administrateurs */}
           {isAdmin && (
             <button
-              onClick={() => setActiveTab && setActiveTab('admin_dashboard')}
+              onClick={() => {
+                if (location.pathname !== '/dashboard') navigate('/dashboard');
+                if (setActiveTab) setActiveTab('admin_dashboard');
+              }}
               className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold flex items-center gap-2 ${
-                activeTab === 'admin_dashboard'
+                location.pathname === '/dashboard' && activeTab === 'admin_dashboard'
                   ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                   : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
               }`}

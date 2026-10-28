@@ -14,12 +14,13 @@ class IsAdminUserRole(permissions.BasePermission):
 
 class IsOwnerOrAdmin(permissions.BasePermission):
     """
-    Permission permettant au propriétaire d'un compte de modifier ses données,
-    ou à un administrateur d'y accéder.
+    Permission permettant au propriétaire d'un compte ou d'un objet (ex: Événement)
+    de modifier ses données, ou à un administrateur d'y accéder.
     """
     def has_object_permission(self, request, view, obj):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.user.is_admin_role:
             return True
-        return obj == request.user
+        owner = getattr(obj, 'user', obj)
+        return owner == request.user

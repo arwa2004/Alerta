@@ -1,7 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import UserSettings from '../components/UserSettings';
+import RecognitionModule from '../components/recognition/RecognitionModule';
+import AdminMedias from '../components/admin/AdminMedias';
+import AdminEvents from '../components/admin/AdminEvents';
 
 export default function AdminDashboard({
+  initialNav = 'overview',
   user,
   adminStats,
   usersList,
@@ -23,8 +28,9 @@ export default function AdminDashboard({
   deleteAccount,
   onLogout,
 }) {
-  const [activeAdminNav, setActiveAdminNav] = useState('overview'); // 'overview' | 'users' | 'settings'
+  const [activeAdminNav, setActiveAdminNav] = useState(initialNav); // 'overview' | 'users' | 'medias' | 'recognition' | 'settings'
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const navigate = useNavigate();
 
   const currentDate = new Date().toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -116,34 +122,60 @@ export default function AdminDashboard({
             </nav>
           </div>
 
-          {/* Groupe 2 : Modules Alerta (À venir) */}
+          {/* Groupe 2 : Modules Alerta */}
           <div>
             <p className="px-3 text-[11px] font-bold text-[#8FA3B8] uppercase tracking-wider mb-2">
               Modules Équipe
             </p>
             <nav className="space-y-1 text-sm">
-              <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
-                <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                  Événements
-                </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M2</span>
-              </div>
 
-              <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
+              {/* MODIF b : le placeholder « Événements / M2 » est remplacé par le bouton Médias */}
+              <button
+                onClick={() => setActiveAdminNav('medias')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
+                  activeAdminNav === 'medias' ? 'bg-[#E4F8F9] text-[#00838F]' : 'text-[#4A5568] hover:bg-gray-100 hover:text-[#0B1F3A]'
+                }`}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                </svg>
+                Médias
+              </button>
+
+              <button
+                onClick={() => setActiveAdminNav('recognition')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
+                  activeAdminNav === 'recognition' ? 'bg-[#E4F8F9] text-[#00838F]' : 'text-[#4A5568] hover:bg-gray-100 hover:text-[#0B1F3A]'
+                }`}
+              >
+                Zones &amp; Visages
+              </button>
+
+
+              {/* M3 — Événements & IA intégré directement dans le Dashboard Admin */}
+              <button
+                onClick={() => setActiveAdminNav('events')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
+                  activeAdminNav === 'events' ? 'bg-[#E4F8F9] text-[#00838F]' : 'text-[#4A5568] hover:bg-gray-100 hover:text-[#0B1F3A]'
+                }`}
+              >
                 <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  Visages &amp; Personnes
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Événements &amp; IA
                 </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M3</span>
-              </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                  activeAdminNav === 'events' ? 'bg-[#00838F] text-white' : 'bg-cyan-100 text-cyan-800'
+                }`}>M3</span>
+              </button>
 
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
                 <span className="flex items-center gap-3">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7" /></svg>
-                  Commandes Vocales
+                  Voix &amp; Alarmes
                 </span>
-                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400">M4</span>
+                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400 font-bold">M4</span>
               </div>
             </nav>
           </div>
@@ -206,8 +238,14 @@ export default function AdminDashboard({
             <span>/</span>
             <span>Dashboard Administrateur</span>
             <span>/</span>
+            {/* MODIF c : branche « Médias » ajoutée en premier */}
             <span className="font-semibold text-[#0B1F3A]">
-              {activeAdminNav === 'settings' ? 'Paramètres & Sécurité' : activeAdminNav === 'users' ? 'Utilisateurs & Comptes' : "Vue d'ensemble"}
+              {activeAdminNav === 'medias' ? 'Médias'
+                : activeAdminNav === 'recognition' ? 'Zones & Visages'
+                : activeAdminNav === 'events' ? 'Événements & IA'
+                : activeAdminNav === 'settings' ? 'Paramètres & Sécurité'
+                : activeAdminNav === 'users' ? 'Utilisateurs & Comptes'
+                : "Vue d'ensemble"}
             </span>
           </div>
 
@@ -247,8 +285,14 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* ════════════ VUE PARAMÈTRES & SÉCURITÉ (PROFIL, 2FA, SÉCURITÉ) ════════════ */}
-          {activeAdminNav === 'settings' ? (
+          {/* ════════════ MODIF d : chaîne conditionnelle, branche « medias » ajoutée au début ════════════ */}
+          {activeAdminNav === 'medias' ? (
+            <AdminMedias />
+          ) : activeAdminNav === 'events' ? (
+            <AdminEvents />
+          ) : activeAdminNav === 'recognition' ? (
+            <RecognitionModule />
+          ) : activeAdminNav === 'settings' ? (
             <UserSettings
               user={user}
               updateProfile={updateProfile}
@@ -416,146 +460,146 @@ export default function AdminDashboard({
                 </>
               )}
 
-          {/* ════════════ SECTION 3 : TABLE DE GESTION (Style Details / Recent orders) ════════════ */}
-          <div id="admin-table" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs overflow-hidden">
-            {/* Barre de recherche et filtres */}
-            <div className="p-6 border-b border-[#F0F2F5] flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h3 className="text-base font-bold text-[#0B1F3A]">Liste des Utilisateurs Alerta</h3>
-                <p className="text-xs text-[#8FA3B8]">Activez ou désactivez les comptes en 1 clic</p>
-              </div>
+              {/* ════════════ SECTION 3 : TABLE DE GESTION (Style Details / Recent orders) ════════════ */}
+              <div id="admin-table" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs overflow-hidden">
+                {/* Barre de recherche et filtres */}
+                <div className="p-6 border-b border-[#F0F2F5] flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-[#0B1F3A]">Liste des Utilisateurs Alerta</h3>
+                    <p className="text-xs text-[#8FA3B8]">Activez ou désactivez les comptes en 1 clic</p>
+                  </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Champ recherche */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Rechercher nom, email..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchAdminData()}
-                    className="pl-9 pr-4 py-2 border border-[#E5E7EB] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#00C2CB] w-56 bg-[#FBFBFC]"
-                  />
-                  <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                  </svg>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Champ recherche */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Rechercher nom, email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && fetchAdminData()}
+                        className="pl-9 pr-4 py-2 border border-[#E5E7EB] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#00C2CB] w-56 bg-[#FBFBFC]"
+                      />
+                      <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                      </svg>
+                    </div>
+
+                    {/* Filtre Rôle */}
+                    <select
+                      value={filterRole}
+                      onChange={(e) => setFilterRole(e.target.value)}
+                      className="px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#0B1F3A] bg-[#FBFBFC] focus:outline-none focus:ring-2 focus:ring-[#00C2CB]"
+                    >
+                      <option value="all">Tous les rôles</option>
+                      <option value="admin">Administrateurs</option>
+                      <option value="user">Utilisateurs</option>
+                    </select>
+
+                    {/* Filtre Statut */}
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#0B1F3A] bg-[#FBFBFC] focus:outline-none focus:ring-2 focus:ring-[#00C2CB]"
+                    >
+                      <option value="all">Tous les statuts</option>
+                      <option value="active">Actifs</option>
+                      <option value="inactive">Désactivés</option>
+                    </select>
+
+                    <button
+                      onClick={fetchAdminData}
+                      className="px-4 py-2 bg-[#00C2CB] hover:bg-[#00838F] text-[#0B1F3A] hover:text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                    >
+                      Filtrer
+                    </button>
+                  </div>
                 </div>
 
-                {/* Filtre Rôle */}
-                <select
-                  value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
-                  className="px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#0B1F3A] bg-[#FBFBFC] focus:outline-none focus:ring-2 focus:ring-[#00C2CB]"
-                >
-                  <option value="all">Tous les rôles</option>
-                  <option value="admin">Administrateurs</option>
-                  <option value="user">Utilisateurs</option>
-                </select>
+                {/* Tableau */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-[#FBFBFC] border-b border-[#F0F2F5] text-[#8FA3B8] uppercase font-bold tracking-wider">
+                        <th className="px-6 py-3.5">Utilisateur</th>
+                        <th className="px-6 py-3.5">Rôle</th>
+                        <th className="px-6 py-3.5">Date Inscription</th>
+                        <th className="px-6 py-3.5">Statut Compte</th>
+                        <th className="px-6 py-3.5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0F2F5]">
+                      {isLoadingUsers ? (
+                        <tr><td colSpan="5" className="text-center py-10 text-gray-400">Chargement des comptes...</td></tr>
+                      ) : usersList.length === 0 ? (
+                        <tr><td colSpan="5" className="text-center py-10 text-gray-400">Aucun utilisateur trouvé.</td></tr>
+                      ) : usersList.map((u) => (
+                        <tr key={u.id} className="hover:bg-[#FBFBFC] transition">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-[#E4F8F9] text-[#00838F] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                {u.first_name?.[0]?.toUpperCase() || u.email[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-bold text-[#0B1F3A]">
+                                  {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : '—'}
+                                </p>
+                                <p className="text-[11px] text-[#8FA3B8]">{u.email}</p>
+                              </div>
+                            </div>
+                          </td>
 
-                {/* Filtre Statut */}
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#0B1F3A] bg-[#FBFBFC] focus:outline-none focus:ring-2 focus:ring-[#00C2CB]"
-                >
-                  <option value="all">Tous les statuts</option>
-                  <option value="active">Actifs</option>
-                  <option value="inactive">Désactivés</option>
-                </select>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                              u.role === 'admin'
+                                ? 'bg-[#0B1F3A] text-[#00C2CB]'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {u.role === 'admin' ? '🛡️ Admin' : '👤 Utilisateur'}
+                            </span>
+                          </td>
 
-                <button
-                  onClick={fetchAdminData}
-                  className="px-4 py-2 bg-[#00C2CB] hover:bg-[#00838F] text-[#0B1F3A] hover:text-white font-bold text-xs rounded-xl transition cursor-pointer"
-                >
-                  Filtrer
-                </button>
-              </div>
-            </div>
+                          <td className="px-6 py-4 text-[#4A5568]">
+                            {u.date_inscription ? new Date(u.date_inscription).toLocaleDateString('fr-FR') : '—'}
+                          </td>
 
-            {/* Tableau */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-[#FBFBFC] border-b border-[#F0F2F5] text-[#8FA3B8] uppercase font-bold tracking-wider">
-                    <th className="px-6 py-3.5">Utilisateur</th>
-                    <th className="px-6 py-3.5">Rôle</th>
-                    <th className="px-6 py-3.5">Date Inscription</th>
-                    <th className="px-6 py-3.5">Statut Compte</th>
-                    <th className="px-6 py-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F2F5]">
-                  {isLoadingUsers ? (
-                    <tr><td colSpan="5" className="text-center py-10 text-gray-400">Chargement des comptes...</td></tr>
-                  ) : usersList.length === 0 ? (
-                    <tr><td colSpan="5" className="text-center py-10 text-gray-400">Aucun utilisateur trouvé.</td></tr>
-                  ) : usersList.map((u) => (
-                    <tr key={u.id} className="hover:bg-[#FBFBFC] transition">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#E4F8F9] text-[#00838F] flex items-center justify-center font-bold text-xs flex-shrink-0">
-                            {u.first_name?.[0]?.toUpperCase() || u.email[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold text-[#0B1F3A]">
-                              {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : '—'}
-                            </p>
-                            <p className="text-[11px] text-[#8FA3B8]">{u.email}</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
-                          u.role === 'admin'
-                            ? 'bg-[#0B1F3A] text-[#00C2CB]'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {u.role === 'admin' ? '🛡️ Admin' : '👤 Utilisateur'}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 text-[#4A5568]">
-                        {u.date_inscription ? new Date(u.date_inscription).toLocaleDateString('fr-FR') : '—'}
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
-                          u.is_active
-                            ? 'bg-green-50 text-[#1D8A57]'
-                            : 'bg-red-50 text-[#C22B36]'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-[#2BB673]' : 'bg-red-400'}`} />
-                          {u.is_active ? 'Actif' : 'Désactivé'}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 text-right">
-                        {u.id === user.id ? (
-                          <span className="text-[11px] text-gray-400 italic font-medium px-2.5 py-1 bg-gray-50 rounded-lg">Votre compte</span>
-                        ) : (
-                          <button
-                            onClick={() => handleToggleUserStatus(u.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
                               u.is_active
-                                ? 'border-red-200 text-[#C22B36] hover:bg-red-50'
-                                : 'border-green-200 text-[#1D8A57] hover:bg-green-50'
-                            }`}
-                          >
-                            {u.is_active ? 'Désactiver' : 'Activer'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
+                                ? 'bg-green-50 text-[#1D8A57]'
+                                : 'bg-red-50 text-[#C22B36]'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-[#2BB673]' : 'bg-red-400'}`} />
+                              {u.is_active ? 'Actif' : 'Désactivé'}
+                            </span>
+                          </td>
 
-    </main>
+                          <td className="px-6 py-4 text-right">
+                            {u.id === user.id ? (
+                              <span className="text-[11px] text-gray-400 italic font-medium px-2.5 py-1 bg-gray-50 rounded-lg">Votre compte</span>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleUserStatus(u.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                  u.is_active
+                                    ? 'border-red-200 text-[#C22B36] hover:bg-red-50'
+                                    : 'border-green-200 text-[#1D8A57] hover:bg-green-50'
+                                }`}
+                              >
+                                {u.is_active ? 'Désactiver' : 'Activer'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+        </main>
       </div>
 
       {/* ── Modale de confirmation de déconnexion Administrateur ── */}
