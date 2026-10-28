@@ -174,7 +174,16 @@ class EvenementSimulateView(APIView):
             scenario = random.choice(scenarios)
 
         type_event = request.data.get('type') or scenario['type']
-        zone_nom = request.data.get('zone') or request.data.get('zone_nom_fallback') or scenario['zone_nom_fallback']
+        
+        # Récupération de la zone choisie ou par défaut depuis les zones réelles créées par l'utilisateur (Module 1)
+        zone_nom = request.data.get('zone') or request.data.get('zone_nom_fallback')
+        if not zone_nom:
+            from recognition.models import Zone as RecoZone
+            user_zone = RecoZone.objects.filter(owner=request.user).first()
+            if user_zone:
+                zone_nom = user_zone.name
+            else:
+                zone_nom = scenario['zone_nom_fallback']
         personne_nom = request.data.get('personne_nom', scenario['personne_nom'])
         
         try:

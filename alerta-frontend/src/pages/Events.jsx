@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import eventsApi from '../api/eventsApi';
 import EventDetailModal from '../components/EventDetailModal';
 import Navbar from '../components/Navbar';
+import { zonesApi } from '../api/recognitionApi';
 
 function Tuile({ titre, valeur, couleur = 'text-[#0B1F3A]' }) {
   return (
@@ -28,6 +29,8 @@ export default function Events() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [simulating, setSimulating] = useState(false);
   const [photoCapturee, setPhotoCapturee] = useState(null);
+  const [zones, setZones] = useState([]);
+  const [selectedZone, setSelectedZone] = useState('');
 
   // Filtres
   const [typeFilter, setTypeFilter] = useState('');
@@ -72,6 +75,15 @@ export default function Events() {
 
   useEffect(() => {
     fetchStats();
+    zonesApi.list()
+      .then((liste) => {
+        const donnees = liste.results ?? liste;
+        if (Array.isArray(donnees) && donnees.length > 0) {
+          setZones(donnees);
+          setSelectedZone(donnees[0].name);
+        }
+      })
+      .catch((err) => console.error('Erreur chargement zones:', err));
   }, []);
 
   useEffect(() => {
@@ -87,9 +99,13 @@ export default function Events() {
   const handleSimulate = async (scenario) => {
     setSimulating(true);
     try {
-      const payload = photoCapturee
-        ? { scenario, photo_capturee: photoCapturee }
-        : scenario;
+      const payload = {
+        scenario,
+        zone: selectedZone || (zones[0] ? zones[0].name : 'Entrée Principale'),
+      };
+      if (photoCapturee) {
+        payload.photo_capturee = photoCapturee;
+      }
       const newEv = await eventsApi.simulateEvenement(payload);
       setPhotoCapturee(null);
       await fetchStats();
@@ -170,8 +186,31 @@ export default function Events() {
               </p>
             </div>
 
-            {/* Actions : Attacher photo + Simuler */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {/* Actions : Choix du lieu / zone + Attacher photo + Simuler */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+              {/* Sélecteur de Zone / Lieu de détection (Module 1) */}
+              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-[#D8DEE4] shadow-xs">
+                <svg className="w-4 h-4 text-[#00838F]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                </svg>
+                <span className="text-xs font-bold text-[#8FA3B8] uppercase tracking-wider">Lieu :</span>
+                {zones.length > 0 ? (
+                  <select
+                    value={selectedZone}
+                    onChange={(e) => setSelectedZone(e.target.value)}
+                    className="text-xs font-bold text-[#0B1F3A] bg-transparent focus:outline-none cursor-pointer pr-1"
+                  >
+                    {zones.map((z) => (
+                      <option key={z.id} value={z.name}>
+                        {z.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-semibold text-gray-400 italic">Zone par défaut</span>
+                )}
+              </div>
               <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-[#D8DEE4] shadow-xs">
                 <label className="text-xs text-[#00838F] font-bold cursor-pointer flex items-center gap-1.5 hover:text-[#006B75]">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
