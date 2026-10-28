@@ -24,7 +24,11 @@ export default function Dashboard({ initialTab = 'accueil' }) {
   const isAdmin = user?.role === 'admin';
 
   // Onglet actif : 'accueil', 'parametres'
-  const [activeTab, setActiveTab] = useState('accueil');
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // ─── Module 3 : Dashboard Événements & Stats ──────────────────────────────
   const [eventsStats, setEventsStats] = useState({
@@ -120,7 +124,7 @@ export default function Dashboard({ initialTab = 'accueil' }) {
   };
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin && activeTab === 'admin_dashboard') {
       fetchAdminData();
     }
   }, [isAdmin, filterRole, filterStatus]);
@@ -173,7 +177,7 @@ export default function Dashboard({ initialTab = 'accueil' }) {
   const formatDate = (d) =>
     d ? new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
 
-  if (isAdmin) {
+  if (isAdmin && activeTab === 'admin_dashboard') {
     return (
       <AdminDashboard
         user={user}
@@ -521,7 +525,7 @@ export default function Dashboard({ initialTab = 'accueil' }) {
       {activeTab === 'medias' && (
         <div className="flex-1 py-8">
           <div className="max-w-6xl mx-auto px-6">
-            <Medias onGoZones={() => setActiveTab('zones')} />
+            <Medias onGoZones={() => navigate('/zones')} />
           </div>
         </div>
       )}

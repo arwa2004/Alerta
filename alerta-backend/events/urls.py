@@ -7,6 +7,8 @@ from .views import (
     EvenementSimulateView,
     DashboardStatsView,
     ZoneListCreateView,
+    AlarmeStatusView,
+    CommandeVocaleView,
 )
 
 urlpatterns = [
@@ -16,6 +18,10 @@ urlpatterns = [
     path('evenements/<int:pk>/analyser-gemini/', EvenementGeminiAnalyseView.as_view(), name='evenements-gemini-analyse'),
     path('evenements/<int:pk>/generer-image/', EvenementGenererImageView.as_view(), name='evenements-generer-image'),
     path('evenements/simulate/', EvenementSimulateView.as_view(), name='evenements-simulate'),
+
+    # Module 4 - Voix & Alarme (Whisper Hugging Face)
+    path('alarme/', AlarmeStatusView.as_view(), name='alarme-status'),
+    path('alarme/commande-vocale/', CommandeVocaleView.as_view(), name='alarme-commande-vocale'),
 
     # Tableau de bord consolidé (statistiques et alertes)
     path('dashboard/', DashboardStatsView.as_view(), name='dashboard-stats'),

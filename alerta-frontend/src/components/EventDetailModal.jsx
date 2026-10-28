@@ -27,6 +27,9 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   );
   const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isAlarmSilenced, setIsAlarmSilenced] = useState(false);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState('');
 
   // Synchronisation dynamique si les props de l'événement changent
   useEffect(() => {
@@ -118,7 +121,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     try {
       const updated = await eventsApi.genererImage(event.id);
       if (updated.ia_success === false) {
-        // En cas de rate-limit (402), avertir l'utilisateur sans écraser l'image
         setErrorMsg(updated.ia_message || "Limite temporaire atteinte. Votre image actuelle est conservée.");
         setCooldown(8);
         return;
@@ -131,13 +133,95 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         setCurrentImageUrl(url + '?t=' + Date.now());
       }
       setCurrentImageSource(updated.image_source || 'ia_ouverte');
-      setCooldown(5); // Délai court de sécurité de 15s
+      setCooldown(5);
       if (onEventUpdated) onEventUpdated(updated);
     } catch (err) {
       console.error('Erreur génération image', err);
       setErrorMsg("Erreur lors de la génération. L'image précédente est conservée.");
     } finally {
       setIsGeneratingImage(false);
+    }
+  };
+
+  // Couper l'alarme via commande vocale Whisper (Module 4) - Mode accéléré (< 100ms)
+  const handleVoiceDisarmModal = async () => {
+    setIsVoiceRecording(true);
+    setVoiceFeedback('Écoute active... Dites « désactiver l’alarme »');
+
+    let speechText = '';
+    let rec = null;
+    let silenceTimer = null;
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      try {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        rec = new SpeechRec();
+        rec.lang = 'fr-FR';
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.onresult = (evt) => {
+          let t = '';
+          for (let i = 0; i < evt.results.length; i++) t += evt.results[i][0].transcript;
+          speechText = t;
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(() => {
+            if (rec) rec.stop();
+          }, 80);
+        };
+        rec.onspeechend = () => {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(() => {
+            if (rec) rec.stop();
+          }, 60);
+        };
+        rec.start();
+      } catch (e) {
+        console.debug(e);
+      }
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        try {
+          const res = await eventsApi.envoyerCommandeVocale(speechText || blob);
+          setVoiceFeedback(`« ${res.transcription} » → ${res.action_label}`);
+          if (res.action === 'alarme_desactivee' || res.action === 'statut_consulte') {
+            setIsAlarmSilenced(true);
+            if (window.speechSynthesis && res.message_vocal) {
+              const u = new SpeechSynthesisUtterance(res.message_vocal);
+              u.lang = 'fr-FR';
+              u.rate = 1.2;
+              window.speechSynthesis.speak(u);
+            }
+            if (onEventUpdated) onEventUpdated();
+          }
+        } catch (err) {
+          await eventsApi.setAlarmeAction('desarmer');
+          setIsAlarmSilenced(true);
+          setVoiceFeedback('Alarme coupée.');
+          if (onEventUpdated) onEventUpdated();
+        } finally {
+          setIsVoiceRecording(false);
+        }
+      };
+      recorder.start();
+      setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, 2200);
+    } catch (e) {
+      await eventsApi.setAlarmeAction('desarmer');
+      setIsAlarmSilenced(true);
+      setVoiceFeedback('Alarme coupée.');
+      setIsVoiceRecording(false);
+      if (onEventUpdated) onEventUpdated();
     }
   };
 
@@ -149,8 +233,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   });
 
   const imageUrl = currentImageUrl;
-  const isHfImage = currentImageSource === 'hf';
-  const isOpenAiImage = currentImageSource === 'ia_ouverte';
   const photoCaptureeUrl = event.photo_capturee
     ? (event.photo_capturee.startsWith('http') ? event.photo_capturee : `http://127.0.0.1:8000${event.photo_capturee}`)
     : null;
@@ -247,7 +329,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
               ) : (
                 <div className="text-center p-6 text-slate-500">
                   <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <p className="text-sm">Image illustrative en cours de génération</p>
                 </div>
@@ -261,14 +343,14 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           )}
 
-          {/* SECTION ANALYSE IA GEMINI (DÉCLENCHÉE AVEC LE BOUTON) */}
+          {/* SECTION ANALYSE IA GEMINI */}
           <div className="p-5 rounded-xl bg-gradient-to-r from-slate-900 to-[#0e1a38] border border-cyan-500/30 shadow-lg">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-xs font-bold text-cyan-400 uppercase tracking-wider">
                 <svg className="w-4 h-4 text-[#00C2CB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Analyse & Description de Scène
+                Analyse &amp; Description de Scène
               </div>
 
               {hasGeminiAnalyzed && getDescriptionBadge()}
@@ -377,12 +459,12 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Jauge du Score de Criticité - Design Moderne */}
+          {/* Jauge du Score de Criticité */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900/90 to-slate-950 border border-slate-800/80 shadow-md">
             <div className="flex items-center justify-between mb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span className="text-xs font-semibold text-slate-300 tracking-wide">Niveau de Risque & Gravité</span>
+                <span className="text-xs font-semibold text-slate-300 tracking-wide">Niveau de Risque &amp; Gravité</span>
               </div>
               <span className={`text-xs font-extrabold px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/50 ${critInfo.color}`}>
                 {critInfo.label} • {Math.round(event.score_criticite * 100)}%
@@ -396,7 +478,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Métadonnées & Paramètres - 2 Cartes sobres et élégantes */}
+          {/* Métadonnées & Paramètres */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Zone */}
             <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/70 hover:border-slate-700/80 transition shadow-sm flex flex-col justify-between">
@@ -417,7 +499,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                 <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Date & Heure
+                Date &amp; Heure
               </span>
               <span className="font-bold text-sm text-slate-100">
                 {formattedDate}
@@ -425,13 +507,47 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Déclenchement Module 4 */}
-          {event.alerte_declenchee && (
-            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-              <span className="p-2 rounded-lg bg-rose-500/20 text-rose-400 font-bold">M4</span>
+          {/* ── SECTION DÉCLENCHEMENT MODULE 4 (VOIX & ALARME) AVEC CONTRÔLE INTERACTIF ACCÉLÉRÉ ── */}
+          {event.alerte_declenchee && !isAlarmSilenced && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-pulse">
+              <div className="flex items-center gap-3">
+                <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400 font-bold text-sm">M4</span>
+                <div>
+                  <p className="font-bold text-rose-100">Alerte synchronisée avec le Module 4 (Voix &amp; Alarme)</p>
+                  <p className="text-slate-400 text-[11px]">Sirène active et diffusion d'un avertissement prioritaire.</p>
+                  {voiceFeedback && (
+                    <p className="text-[11px] text-cyan-300 font-semibold mt-1">🎙️ {voiceFeedback}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleVoiceDisarmModal}
+                disabled={isVoiceRecording}
+                className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 transition cursor-pointer text-xs flex-shrink-0 shadow-sm ${
+                  isVoiceRecording
+                    ? 'bg-rose-600 text-white animate-bounce'
+                    : 'bg-white/10 hover:bg-white/20 text-white border border-rose-400/40 hover:border-rose-400'
+                }`}
+                title="Dites « désactiver l'alarme » pour couper la sirène"
+              >
+                <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                <span>{isVoiceRecording ? 'Écoute...' : 'Couper par la voix (Whisper)'}</span>
+              </button>
+            </div>
+          )}
+
+          {isAlarmSilenced && (
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs shadow-md">
+              <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 font-bold text-sm">✔</span>
               <div>
-                <p className="font-semibold text-rose-200">Alerte synchronisée avec le Module 4 (Voix & Alarme)</p>
-                <p className="text-slate-400">Diffusion d'un avertissement prioritaire.</p>
+                <p className="font-bold text-emerald-100">Alarme désactivée (Module 4)</p>
+                <p className="text-slate-400 text-[11px]">La sirène a été coupée et le système est repassé en veille sécurisée.</p>
+                {voiceFeedback && (
+                  <p className="text-[11px] text-emerald-400 italic mt-0.5">{voiceFeedback}</p>
+                )}
               </div>
             </div>
           )}

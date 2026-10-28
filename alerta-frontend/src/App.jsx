@@ -78,17 +78,34 @@ function App() {
             element={<PublicRoute><ForgotPassword /></PublicRoute>}
           />
 
-          {/* ── Dashboard Principal (AdminDashboard pour Admin, Dashboard User pour Utilisateur) ── */}
+          {/* ── Redirection racine vers /dashboard ── */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          {/* ── Page d'Accueil Générale ── */}
           <Route
             path="/dashboard"
             element={<ProtectedRoute><Dashboard initialTab="accueil" /></ProtectedRoute>}
           />
 
-          {/* ── Redirection /admin vers /dashboard (où AdminDashboard est affiché) ── */}
+          {/* ── Module 1 : Zones & Visages ── */}
           <Route
-            path="/admin"
-            element={<AdminRoute><Dashboard initialTab="accueil" /></AdminRoute>}
+            path="/zones"
+            element={<ProtectedRoute><Dashboard initialTab="zones" /></ProtectedRoute>}
           />
+
+          {/* ── Module 2 : Médias ── */}
+          <Route
+            path="/medias"
+            element={<ProtectedRoute><Dashboard initialTab="medias" /></ProtectedRoute>}
+          />
+
+          {/* ── Module 3 : Section Événements ── */}
+          <Route
+            path="/events"
+            element={<ProtectedRoute><Events /></ProtectedRoute>}
+          />
+
+          {/* ── Planificateur de caméras CCTV ── */}
           <Route
             path="/planner"
             element={
@@ -98,10 +115,16 @@ function App() {
             }
           />
 
-          {/* ── Section Événements (Module 3) ── */}
+          {/* ── Paramètres & Sécurité du compte ── */}
           <Route
-            path="/events"
-            element={<ProtectedRoute><Events /></ProtectedRoute>}
+            path="/settings"
+            element={<ProtectedRoute><Dashboard initialTab="parametres" /></ProtectedRoute>}
+          />
+
+          {/* ── Dashboard Administrateur dédié ── */}
+          <Route
+            path="/admin"
+            element={<AdminRoute><Dashboard initialTab="admin_dashboard" /></AdminRoute>}
           />
 
           {/* ── Fallback ── */}
