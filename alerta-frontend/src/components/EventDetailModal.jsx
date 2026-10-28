@@ -208,36 +208,36 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         {/* Contenu défilant */}
         <div className="p-6 overflow-y-auto space-y-6">
 
-          {/* SECTION VISUELLE : CAPTURE RÉELLE (MODULE 2) ET/OU RECONSTITUTION IA */}
+          {/* SECTION VISUELLE : CAPTURE RÉELLE ET/OU RECONSTITUTION IA */}
           {photoCaptureeUrl ? (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* 1. Vraie capture caméra M2 */}
-                <div className="relative rounded-xl overflow-hidden bg-black border border-emerald-500/50 aspect-video flex items-center justify-center shadow-lg">
-                  <img src={photoCaptureeUrl} alt="Capture caméra réelle" className="w-full h-full object-cover" />
-                  <div className="absolute top-2 left-2 bg-slate-950/90 backdrop-blur-md px-2.5 py-0.5 rounded text-[10px] font-mono border border-emerald-500/50 text-emerald-300 flex items-center gap-1.5">
+                {/* 1. Vraie capture caméra */}
+                <div className="relative rounded-2xl overflow-hidden bg-black border border-emerald-500/40 aspect-video flex items-center justify-center shadow-lg">
+                  <img src={photoCaptureeUrl} alt="Capture caméra" className="w-full h-full object-cover" />
+                  <div className="absolute top-2.5 left-2.5 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5 shadow-sm">
                     <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    Capture Réelle Caméra (Preuve M2)
+                    Capture Caméra
                   </div>
                 </div>
 
                 {/* 2. Reconstitution IA */}
-                <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+                <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
                   {imageUrl ? (
                     <img src={imageUrl} alt="Reconstitution IA" className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-center p-3 text-slate-500 text-xs">Reconstitution non demandée</div>
                   )}
-                  <div className="absolute top-2 left-2 bg-slate-950/90 backdrop-blur-md px-2.5 py-0.5 rounded text-[10px] font-mono border border-cyan-500/40 text-cyan-300 flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-                    Reconstitution IA (FLUX.1)
+                  <div className="absolute top-2.5 left-2.5 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-cyan-500/40 text-cyan-300 flex items-center gap-1.5 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                    Reconstitution IA
                   </div>
                 </div>
               </div>
             </div>
           ) : (
             /* Mode sans capture attachée : affichage de la reconstitution */
-            <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
+            <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-800 aspect-video flex items-center justify-center shadow-inner">
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -253,18 +253,10 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                 </div>
               )}
 
-              {/* Bandeau d'information Reconstitution */}
-              <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-mono border flex items-center gap-2 border-cyan-500/40 text-cyan-300">
-                <span className={`w-2 h-2 rounded-full ${isHfImage ? 'bg-cyan-400' : isOpenAiImage ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-                {isHfImage
-                  ? 'Reconstitution IA (Hugging Face)'
-                  : isOpenAiImage
-                  ? 'Reconstitution IA (Moteur FLUX.1)'
-                  : 'Reconstitution de la scène (Simulation)'}
-              </div>
-
-              <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-0.5 rounded text-[10px] font-mono text-slate-300">
-                Zone : {event.zone_nom || event.zone_nom_fallback || 'Secteur'} • Reconstitution illustrative
+              {/* Badge discret */}
+              <div className="absolute top-3 left-3 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-lg text-[11px] font-semibold border flex items-center gap-2 border-cyan-500/40 text-cyan-300 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                Reconstitution IA
               </div>
             </div>
           )}
@@ -385,61 +377,50 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Jauge du Score de Criticité */}
-          <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-slate-400">Niveau de Risque & Gravité</span>
-              <span className={`text-sm font-bold ${critInfo.color}`}>
-                {critInfo.label} — {Math.round(event.score_criticite * 100)}%
+          {/* Jauge du Score de Criticité - Design Moderne */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900/90 to-slate-950 border border-slate-800/80 shadow-md">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="text-xs font-semibold text-slate-300 tracking-wide">Niveau de Risque & Gravité</span>
+              </div>
+              <span className={`text-xs font-extrabold px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/50 ${critInfo.color}`}>
+                {critInfo.label} • {Math.round(event.score_criticite * 100)}%
               </span>
             </div>
-            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-800/80 rounded-full overflow-hidden p-0.5 border border-slate-700/30">
               <div
-                className={`h-full ${critInfo.barBg} transition-all duration-700`}
+                className={`h-full ${critInfo.barBg} rounded-full transition-all duration-700 shadow-sm`}
                 style={{ width: `${Math.max(5, Math.min(100, Math.round(event.score_criticite * 100)))}%` }}
               ></div>
             </div>
           </div>
 
-          {/* Métadonnées & Paramètres sous forme de grille */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Zone sous surveillance</span>
-              <span className="font-semibold text-slate-200 flex items-center gap-2">
-                <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {/* Métadonnées & Paramètres - 2 Cartes sobres et élégantes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Zone */}
+            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/70 hover:border-slate-700/80 transition shadow-sm flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 </svg>
+                Zone Surveillée
+              </span>
+              <span className="font-bold text-sm text-slate-100 truncate">
                 {event.zone_nom || event.zone_nom_fallback}
               </span>
             </div>
 
-            <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Horodatage précis</span>
-              <span className="font-semibold text-slate-200 flex items-center gap-2">
-                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Horodatage */}
+            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/70 hover:border-slate-700/80 transition shadow-sm flex flex-col justify-between">
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+                Date & Heure
+              </span>
+              <span className="font-bold text-sm text-slate-100">
                 {formattedDate}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Origine de l'image</span>
-              <span className="font-semibold text-xs flex items-center gap-1.5">
-                {isHfImage ? (
-                  <span className="text-cyan-400 font-bold">Hugging Face (Inference)</span>
-                ) : isOpenAiImage ? (
-                  <span className="text-emerald-400 font-bold">IA Générative (Moteur FLUX.1)</span>
-                ) : (
-                  <span className="text-amber-400 font-medium">Reconstitution Simulation</span>
-                )}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
-              <span className="block text-xs text-slate-400 mb-1">Indice Reconnaissance (M1)</span>
-              <span className="font-semibold text-cyan-300">
-                {Math.round(event.score_confiance * 100)}% <span className="text-[10px] text-slate-400 font-normal">(Simulé)</span>
               </span>
             </div>
           </div>
