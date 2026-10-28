@@ -5,6 +5,7 @@ import axiosClient from '../api/axiosClient';
 import AdminDashboard from './AdminDashboard';
 import UserSettings from '../components/UserSettings';
 import RecognitionModule from '../components/recognition/RecognitionModule';
+import Medias from './Medias';
 export default function Dashboard({ initialTab = 'accueil' }) {
   const {
     user,
@@ -316,7 +317,13 @@ export default function Dashboard({ initialTab = 'accueil' }) {
     </div>
   </div>
 )}
-
+      {activeTab === 'medias' && (
+        <div className="flex-1 py-8">
+          <div className="max-w-6xl mx-auto px-6">
+            <Medias onGoZones={() => setActiveTab('zones')} />
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════ ONGLET 2 : PARAMÈTRES DU COMPTE ═════════════════════════ */}
       {activeTab === 'parametres' && (
