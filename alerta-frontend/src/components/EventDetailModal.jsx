@@ -120,7 +120,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
       if (updated.ia_success === false) {
         // En cas de rate-limit (402), avertir l'utilisateur sans écraser l'image
         setErrorMsg(updated.ia_message || "Limite temporaire atteinte. Votre image actuelle est conservée.");
-        setCooldown(30);
+        setCooldown(8);
         return;
       }
 
@@ -131,7 +131,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         setCurrentImageUrl(url + '?t=' + Date.now());
       }
       setCurrentImageSource(updated.image_source || 'ia_ouverte');
-      setCooldown(15); // Délai court de sécurité de 15s
+      setCooldown(5); // Délai court de sécurité de 15s
       if (onEventUpdated) onEventUpdated(updated);
     } catch (err) {
       console.error('Erreur génération image', err);

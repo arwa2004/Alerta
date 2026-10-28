@@ -296,31 +296,38 @@ class AlertaAIService:
             except Exception as e:
                 print(f"[Hugging Face Space Indisponible -> Bascule vers Pollinations FLUX.1 : {e}]")
 
-        # 2. Alternative gratuite Pollinations — prompt construit depuis la description IA
+        # 2. Alternative gratuite Pollinations (avec bascule automatique flux -> turbo sans blocage)
         pollinations_error = None
-        try:
-            import urllib.parse
-            url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_image_safe)}"
-            params = {"width": 640, "height": 360, "nologo": "true", "seed": random.randint(100, 999999)}
-            res = requests.get(url_pollinations, params=params, timeout=25)
-            if res.status_code == 200 and len(res.content) > 3000:
-                evenement.image_reconstituee.save(
-                    f"flux_{evenement.id}.jpg",
-                    ContentFile(res.content),
-                    save=False
-                )
-                evenement.image_source = "ia_ouverte"
-                evenement.save(update_fields=['image_reconstituee', 'image_source'])
-                print("[IA Generative Ouverte] Image FLUX.1 generee depuis description IA (image_source=ia_ouverte)")
-                return True, "Image générée avec succès par l'IA (Moteur FLUX.1)."
-            elif res.status_code == 402:
-                pollinations_error = "Limite gratuite temporaire atteinte (1 image / 45s). Votre image actuelle est conservée, réessayez dans quelques secondes."
-                print(f"[Pollinations Rate Limit 402] {pollinations_error}")
-            else:
-                pollinations_error = f"Le service d'image IA est momentanément indisponible (Code {res.status_code})."
-        except Exception as e:
-            pollinations_error = f"Erreur de connexion au service d'image : {e}"
-            print(f"[IA Ouverte Pollinations non disponible: {e}]")
+        for model_candidate in ["flux", "turbo"]:
+            try:
+                import urllib.parse
+                url_pollinations = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt_image_safe)}"
+                params = {
+                    "width": 640,
+                    "height": 360,
+                    "nologo": "true",
+                    "model": model_candidate,
+                    "seed": random.randint(100, 999999)
+                }
+                res = requests.get(url_pollinations, params=params, timeout=25)
+                if res.status_code == 200 and len(res.content) > 3000:
+                    evenement.image_reconstituee.save(
+                        f"flux_{evenement.id}.jpg",
+                        ContentFile(res.content),
+                        save=False
+                    )
+                    evenement.image_source = "ia_ouverte"
+                    evenement.save(update_fields=['image_reconstituee', 'image_source'])
+                    print(f"[IA Generative Ouverte] Image generee avec succes (modele: {model_candidate})")
+                    return True, "Image générée avec succès par l'IA."
+                elif res.status_code == 402:
+                    print(f"[Pollinations {model_candidate} 402] Limite FLUX -> Bascule automatique sur Turbo...")
+                    continue
+                else:
+                    pollinations_error = f"Service indisponible (Code {res.status_code})."
+            except Exception as e:
+                pollinations_error = f"Erreur de connexion : {e}"
+                print(f"[IA Ouverte Pollinations ({model_candidate}) non disponible: {e}]")
 
         # 3. Si HF et Pollinations échouent mais qu'une image IA existait déjà : on la GARDE intacte !
         if evenement.image_source in ('hf', 'ia_ouverte') and evenement.image_reconstituee:
