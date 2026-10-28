@@ -94,4 +94,80 @@ def _traiter(media_id):
 
     media.date_traitement = timezone.now()
     media.save(update_fields=["resultats", "statut", "message_erreur", "date_traitement"])
+
+    if media.statut == Media.Statut.TERMINE:
+        _creer_evenement_depuis_media(media)
+
     close_old_connections()
+
+def _creer_evenement_depuis_media(media):
+    """
+    Pont automatique Module 2 (Médias) -> Module 3 (Événements).
+    Tout média analysé comportant un visage inconnu, un visage reconnu
+    ou du mouvement alimente automatiquement le journal de sécurité Module 3.
+    """
+    try:
+        from events.models import Evenement
+        from events.services import evaluer_criticite, analyser_evenement
+
+        res = media.resultats or {}
+        has_unknown = res.get("unknown_detected", False) or res.get("alert_triggered", False)
+        known_persons = res.get("known_persons", [])
+        mvt_data = res.get("mouvement", {})
+        has_mvt = mvt_data.get("detecte", False) if isinstance(mvt_data, dict) else False
+
+        zone_label = media.zone.name if media.zone else "Zone Caméra"
+
+        # 1. Visage inconnu / Alerte
+        if has_unknown:
+            crit = evaluer_criticite("inconnu")
+            ev = Evenement.objects.create(
+                user=media.owner,
+                zone_nom_fallback=zone_label,
+                type="inconnu",
+                photo_capturee=media.fichier if media.type == Media.Type.PHOTO else None,
+                score_criticite=crit["score_criticite"],
+                niveau_criticite=crit["niveau_criticite"],
+                alerte_declenchee=crit["alerte_declenchee"],
+            )
+            try:
+                analyser_evenement(ev)
+            except Exception as e_ai:
+                logger.warning(f"Analyse IA événement inconnu #{ev.id}: {e_ai}")
+
+        # 2. Visage(s) connu(s)
+        elif known_persons:
+            crit = evaluer_criticite("visage_connu")
+            ev = Evenement.objects.create(
+                user=media.owner,
+                zone_nom_fallback=zone_label,
+                type="visage_connu",
+                personne_nom=", ".join(known_persons),
+                photo_capturee=media.fichier if media.type == Media.Type.PHOTO else None,
+                score_criticite=crit["score_criticite"],
+                niveau_criticite=crit["niveau_criticite"],
+                alerte_declenchee=crit["alerte_declenchee"],
+            )
+            try:
+                analyser_evenement(ev)
+            except Exception as e_ai:
+                logger.warning(f"Analyse IA événement connu #{ev.id}: {e_ai}")
+
+        # 3. Mouvement suspect (vidéo)
+        elif has_mvt:
+            crit = evaluer_criticite("mouvement")
+            ev = Evenement.objects.create(
+                user=media.owner,
+                zone_nom_fallback=zone_label,
+                type="mouvement",
+                score_criticite=crit["score_criticite"],
+                niveau_criticite=crit["niveau_criticite"],
+                alerte_declenchee=crit["alerte_declenchee"],
+            )
+            try:
+                analyser_evenement(ev)
+            except Exception as e_ai:
+                logger.warning(f"Analyse IA événement mouvement #{ev.id}: {e_ai}")
+
+    except Exception as e:
+        logger.warning(f"Pont M2 -> M3 impossible pour le média #{media.id}: {e}")
