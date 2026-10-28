@@ -1,9 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { Navigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
 import eventsApi from '../api/eventsApi';
 import EventDetailModal from '../components/EventDetailModal';
 import Navbar from '../components/Navbar';
 
 export default function Events() {
+  const { user } = useContext(AuthContext);
+
+  // Redirection des administrateurs vers leur dashboard dédié
+  if (user?.role === 'admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);

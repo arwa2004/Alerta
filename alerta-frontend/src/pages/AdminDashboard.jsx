@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import UserSettings from '../components/UserSettings';
 import RecognitionModule from '../components/recognition/RecognitionModule';
-import AdminMedias from '../components/admin/AdminMedias'; // MODIF a : import ajouté
+import AdminMedias from '../components/admin/AdminMedias';
+import AdminEvents from '../components/admin/AdminEvents';
 
 export default function AdminDashboard({
+  initialNav = 'overview',
   user,
   adminStats,
   usersList,
@@ -26,7 +28,7 @@ export default function AdminDashboard({
   deleteAccount,
   onLogout,
 }) {
-  const [activeAdminNav, setActiveAdminNav] = useState('overview'); // 'overview' | 'users' | 'medias' | 'recognition' | 'settings'
+  const [activeAdminNav, setActiveAdminNav] = useState(initialNav); // 'overview' | 'users' | 'medias' | 'recognition' | 'settings'
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
 
@@ -150,18 +152,22 @@ export default function AdminDashboard({
               </button>
 
 
-              {/* M3 — Actif et interactif ! */}
+              {/* M3 — Événements & IA intégré directement dans le Dashboard Admin */}
               <button
-                onClick={() => navigate('/events')}
-                className="w-full flex items-center justify-between px-3.5 py-2 text-cyan-600 bg-cyan-50/60 hover:bg-cyan-100/80 rounded-lg transition text-left font-semibold cursor-pointer"
+                onClick={() => setActiveAdminNav('events')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
+                  activeAdminNav === 'events' ? 'bg-[#E4F8F9] text-[#00838F]' : 'text-[#4A5568] hover:bg-gray-100 hover:text-[#0B1F3A]'
+                }`}
               >
                 <span className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   Événements &amp; IA
                 </span>
-                <span className="text-[10px] bg-cyan-200 text-cyan-800 px-1.5 py-0.5 rounded font-bold">M3</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                  activeAdminNav === 'events' ? 'bg-[#00838F] text-white' : 'bg-cyan-100 text-cyan-800'
+                }`}>M3</span>
               </button>
 
               <div className="flex items-center justify-between px-3.5 py-2 text-gray-400 rounded-lg">
@@ -236,6 +242,7 @@ export default function AdminDashboard({
             <span className="font-semibold text-[#0B1F3A]">
               {activeAdminNav === 'medias' ? 'Médias'
                 : activeAdminNav === 'recognition' ? 'Zones & Visages'
+                : activeAdminNav === 'events' ? 'Événements & IA'
                 : activeAdminNav === 'settings' ? 'Paramètres & Sécurité'
                 : activeAdminNav === 'users' ? 'Utilisateurs & Comptes'
                 : "Vue d'ensemble"}
@@ -281,6 +288,8 @@ export default function AdminDashboard({
           {/* ════════════ MODIF d : chaîne conditionnelle, branche « medias » ajoutée au début ════════════ */}
           {activeAdminNav === 'medias' ? (
             <AdminMedias />
+          ) : activeAdminNav === 'events' ? (
+            <AdminEvents />
           ) : activeAdminNav === 'recognition' ? (
             <RecognitionModule />
           ) : activeAdminNav === 'settings' ? (
