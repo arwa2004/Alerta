@@ -6,8 +6,6 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
-import UserDashboard from './pages/UserDashboard';
-import AdminPage from './pages/AdminPage';
 import Events from './pages/Events';
 
 // ── Protège les routes privées ────────────────────────────────────────────────
@@ -55,8 +53,7 @@ const PublicRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
   if (loading) return null;
   if (user) {
-    // Admins → /admin, Users → /dashboard
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 };
@@ -80,16 +77,16 @@ function App() {
             element={<PublicRoute><ForgotPassword /></PublicRoute>}
           />
 
-          {/* ── Dashboard Utilisateur ── */}
+          {/* ── Dashboard Principal (AdminDashboard pour Admin, Dashboard User pour Utilisateur) ── */}
           <Route
             path="/dashboard"
             element={<ProtectedRoute><Dashboard initialTab="accueil" /></ProtectedRoute>}
           />
 
-          {/* ── Dashboard Administrateur ── */}
+          {/* ── Redirection /admin vers /dashboard (où AdminDashboard est affiché) ── */}
           <Route
             path="/admin"
-            element={<AdminRoute><AdminPage /></AdminRoute>}
+            element={<AdminRoute><Dashboard initialTab="accueil" /></AdminRoute>}
           />
 
           {/* ── Section Événements (Module 3) ── */}
