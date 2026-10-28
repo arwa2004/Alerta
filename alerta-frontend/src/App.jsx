@@ -5,6 +5,7 @@ import { useContext } from 'react';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
+import Dashboard from './pages/Dashboard';
 import UserDashboard from './pages/UserDashboard';
 import AdminPage from './pages/AdminPage';
 import Events from './pages/Events';
@@ -82,7 +83,7 @@ function App() {
           {/* ── Dashboard Utilisateur ── */}
           <Route
             path="/dashboard"
-            element={<ProtectedRoute><UserDashboard initialTab="accueil" /></ProtectedRoute>}
+            element={<ProtectedRoute><Dashboard initialTab="accueil" /></ProtectedRoute>}
           />
 
           {/* ── Dashboard Administrateur ── */}
@@ -94,7 +95,7 @@ function App() {
           {/* ── Section Événements (Module 3) ── */}
           <Route
             path="/events"
-            element={<ProtectedRoute><UserDashboard initialTab="evenements" /></ProtectedRoute>}
+            element={<ProtectedRoute><Events /></ProtectedRoute>}
           />
 
           {/* ── Fallback ── */}
