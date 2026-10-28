@@ -6,11 +6,13 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .services.digital_twin import simulate_custom_cameras
 
+# Imports des services
+from .services.digital_twin import simulate_custom_cameras
+from .services.floorplan_analysis import analyse_floor_plan, recommend_cameras
+from .services.security_auditor import audit_floor_plan
+
+# Imports des modèles et serializers
 from .models import (
     FloorPlan, Project, FloorPlanAnalysis, CameraOptimization
 )
@@ -19,10 +21,6 @@ from .serializers import (
     FloorPlanAnalysisSerializer, CameraOptimizationSerializer,
     OptimizationRequestSerializer,
 )
-from .services.floorplan_analysis import analyse_floor_plan, recommend_cameras
-
-
-
 
 MAX_CAMERAS_FOR_PLAN   = 20
 DEFAULT_CAMERA_PRICE   = 120.0
@@ -30,10 +28,6 @@ DEFAULT_FOV_DEG        = 90.0
 DEFAULT_RANGE_FRAC     = 0.9
 DEFAULT_TARGET_COVER   = 0.93
 DEFAULT_MIN_ROOM_FRAC  = 0.03
-
-
-
-
 
 
 class ProjectListCreateView(generics.ListCreateAPIView):
@@ -99,7 +93,6 @@ class FloorPlanImageView(generics.GenericAPIView):
         response['Cache-Control'] = 'private, max-age=0, no-store'
         response['X-Content-Type-Options'] = 'nosniff'
         return response
-
 
 
 def _owned_floor_plan(request, fp_id):
@@ -169,20 +162,6 @@ class OptimizeCamerasView(APIView):
     """
     Budget-constrained CCTV placement using the ray-cast / greedy set-cover
     planner in `floorplan_analysis.recommend_cameras`.
-
-    The request body mirrors the old shape so existing clients keep working:
-
-        { "budget": 1000,
-          "camera_config": { "price": 120, "fov_deg": 90,
-                             "range_frac": 0.8, "target_coverage": 0.93,
-                             "min_room_frac": 0.03,
-                             "exclude_room_ids": [4, 7],
-                             "plan_width_m": 12.5 } }
-
-    The result dict now contains:
-        cameras[], coverage_pct, room_coverage, optional_room_ids,
-        overlay_b64, total_cost, remaining_budget, warnings,
-        camera_config_used
     """
     permission_classes = [IsAuthenticated]
 
@@ -208,9 +187,6 @@ class OptimizeCamerasView(APIView):
             return Response({"detail": "Run analysis first."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # ------------------------------------------------------------------
-        # Parse / validate camera_config
-        # ------------------------------------------------------------------
         try:
             price         = float(cfg.get("price", DEFAULT_CAMERA_PRICE))
             fov_deg       = float(cfg.get("fov_deg", DEFAULT_FOV_DEG))
@@ -241,9 +217,6 @@ class OptimizeCamerasView(APIView):
             return Response({"detail": "min_room_frac must be in [0, 1]."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # ------------------------------------------------------------------
-        # budget → max number of cameras (capped at MAX_CAMERAS_FOR_PLAN)
-        # ------------------------------------------------------------------
         max_cams = min(MAX_CAMERAS_FOR_PLAN, int(budget // price))
         if max_cams <= 0:
             empty = {
@@ -263,9 +236,6 @@ class OptimizeCamerasView(APIView):
             return Response(CameraOptimizationSerializer(obj).data,
                             status=status.HTTP_201_CREATED)
 
-        # ------------------------------------------------------------------
-        # Run the planner
-        # ------------------------------------------------------------------
         try:
             result = recommend_cameras(
                 analysis.result_json,
@@ -285,8 +255,6 @@ class OptimizeCamerasView(APIView):
             return Response({"detail": f"Optimization failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Budget accounting is not done inside recommend_cameras (it works on
-        # camera count), so we attach it here.
         result["total_cost"]       = round(price * len(result["cameras"]), 2)
         result["remaining_budget"] = round(budget - result["total_cost"], 2)
         result["camera_config_used"] = {
@@ -328,6 +296,8 @@ class OptimizationDetailView(APIView):
             return Response({"detail": "Not found."},
                             status=status.HTTP_404_NOT_FOUND)
         return Response(CameraOptimizationSerializer(opt).data)
+
+
 class DigitalTwinSimulateView(APIView):
     """
     Endpoint pour le jumeau numérique. 
@@ -344,3 +314,55 @@ class DigitalTwinSimulateView(APIView):
 
         result = simulate_custom_cameras(cleaned_image_b64, custom_cameras, image_width)
         return Response(result, status=status.HTTP_200_OK)
+
+
+# ==============================================================================
+# NOUVEAU : AUDITEUR DE RISQUES DE SÉCURITÉ (AI Security Risk Auditor)
+# ==============================================================================
+class SecurityAuditView(APIView):
+    """
+    Endpoint pour générer l'audit de sécurité (Security Risk Auditor).
+    Reçoit un floor_plan_id et renvoie le rapport de risque complet.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, floor_plan_id):
+        # 1. Vérifier que le plan appartient bien à l'utilisateur
+        fp = _owned_floor_plan(request, floor_plan_id)
+        if fp is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Récupérer le chemin physique de l'image
+        path = _image_path(fp)
+        if path is None:
+            return Response({"detail": "Floor plan image missing or unconverted."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Optionnel : récupérer la largeur réelle du plan (en mètres) envoyée par le frontend
+        plan_width_m = request.data.get('plan_width_m', None)
+        if plan_width_m is not None:
+            try:
+                plan_width_m = float(plan_width_m)
+            except ValueError:
+                plan_width_m = None
+
+        try:
+            # 3. Lancer l'analyse de base (OpenCV) pour avoir les pièces et les murs
+            analysis_result = analyse_floor_plan(path)
+            
+            # 4. Lancer l'audit de sécurité (qui utilise l'analyse précédente)
+            audit_report = audit_floor_plan(
+                result=analysis_result, 
+                image_path=path, 
+                plan_width_m=plan_width_m
+            )
+            
+            # 5. Renvoyer le rapport complet (scores, risques, overlay_b64...)
+            return Response(audit_report, status=status.HTTP_200_OK)
+
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"detail": f"Audit failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
