@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import eventsApi from '../api/eventsApi';
 import EventDetailModal from '../components/EventDetailModal';
+import Navbar from '../components/Navbar';
 
 export default function Events() {
   const [events, setEvents] = useState([]);
@@ -105,7 +106,9 @@ export default function Events() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b1329] text-slate-100 p-6 md:p-10 font-sans">
+    <div className="min-h-screen bg-[#0b1329] text-slate-100 font-sans flex flex-col">
+      <Navbar activeTab="evenements" />
+      <div className="p-6 md:p-10 flex-1">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Titre & Barre d'actions */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
@@ -393,6 +396,7 @@ export default function Events() {
             }}
           />
         )}
+      </div>
       </div>
     </div>
   );
