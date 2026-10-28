@@ -322,13 +322,101 @@ def _cam_window_gain(counts, fov):
     return cs[c - half + fov] - cs[c - half]
 
 
-def recommend_cameras(result, fov_deg=90, range_frac=0.8, max_cameras=12,
-                      target_coverage=0.93, min_room_frac=0.03,
-                      exclude_room_ids=(), plan_width_m=None):
-   
+def _cam_candidates(result, s, free, dt, labels, d_min, bsize, W, H):
+    """Realistic mounting spots.
+    corner : convex room corner, camera looks along the corner's bisector
+             (a 90-degree lens then covers the whole quadrant)
+    wall   : middle of a long wall, looks straight into the room
+    center : fallback so that every room has at least one candidate
+    Each candidate: dict(x, y, kind, pref, spread, factor, room)
+    pref/spread restrict the allowed viewing directions."""
+    cands, seen = [], set()
+
+    def add(x, y, rid, kind, pref, spread, factor):
+        x, y = int(round(x)), int(round(y))
+        if not (0 <= x < W and 0 <= y < H) or not free[y, x] or labels[y, x] != rid:
+            return
+        key = (x // 4, y // 4, kind)
+        if key in seen:
+            return
+        seen.add(key)
+        cands.append({"x": x, "y": y, "kind": kind, "pref": pref,
+                      "spread": spread, "factor": factor, "room": rid})
+
+    for r in result["rooms"]:
+        rid = int(r["id"])
+        poly = np.array(r["polygon"], np.float32) * s
+        n = len(poly)
+        for i in range(n):
+            v, p, q = poly[i], poly[i - 1], poly[(i + 1) % n]
+            u1, u2 = p - v, q - v
+            l1, l2 = float(np.linalg.norm(u1)), float(np.linalg.norm(u2))
+            if min(l1, l2) < 1e-3:
+                continue
+            u1, u2 = u1 / l1, u2 / l2
+
+            # --- corner candidate -----------------------------------------
+            b = u1 + u2
+            nb = float(np.linalg.norm(b))
+            if nb > 0.3:                                   # not a straight vertex
+                b = b / nb
+                theta = np.degrees(np.arccos(np.clip(float(np.dot(u1, u2)), -1, 1)))
+                off = d_min / max(np.sin(np.radians(theta / 2.0)), 0.5)
+                pref = float(np.degrees(np.arctan2(b[1], b[0])) % 360.0)
+                add(v[0] + b[0] * off, v[1] + b[1] * off, rid, "corner", pref, 25, 1.0)
+
+            # --- wall-mounted candidates on long edges ----------------------
+            if l2 >= 0.25 * bsize:
+                e = (q - v) / l2
+                for t in (0.5,) if l2 < 0.5 * bsize else (0.3, 0.7):
+                    m = v + (q - v) * t
+                    for nx, ny in ((-e[1], e[0]), (e[1], -e[0])):
+                        px, py = m[0] + nx * d_min, m[1] + ny * d_min
+                        xi, yi = int(round(px)), int(round(py))
+                        if 0 <= xi < W and 0 <= yi < H and free[yi, xi] and labels[yi, xi] == rid:
+                            pref = float(np.degrees(np.arctan2(ny, nx)) % 360.0)
+                            add(px, py, rid, "wall", pref, 40, 0.85)
+                            break
+
+        # --- fallback: deepest point of the room ---------------------------
+        yy, xx = np.where(labels == rid)
+        if len(xx):
+            k = int(np.argmax(dt[yy, xx]))
+            add(xx[k], yy[k], rid, "center", None, 180, 0.6)
+    return cands
+
+
+def recommend_cameras(result, fov_deg=90, range_frac=0.8, max_range_m=None,
+                      max_cameras=12, target_coverage=0.90, min_room_frac=0.03,
+                      exclude_room_ids=(), plan_width_m=None,
+                      overlap_penalty=0.25, optional_weight=0.15,
+                      min_unique_pct=1.0):
+    """
+    Recommend camera positions + directions so that the house is covered.
+
+    result            : dict returned by analyse_floor_plan()
+    fov_deg           : horizontal field of view of each camera (default 90)
+    range_frac        : max camera range as a fraction of the building's longest side
+    max_range_m       : alternative: range in metres (needs plan_width_m)
+    plan_width_m      : real length (m) of the building's LONGEST side
+    min_room_frac     : rooms smaller than this share of the total area are
+                        optional (toilets, closets, ...)
+    exclude_room_ids  : rooms you never want covered (bathrooms, bedrooms...)
+    overlap_penalty   : 0..1, cost of re-covering something already seen
+    optional_weight   : 0..1, value of seeing an optional room
+    min_unique_pct    : a camera that adds less than this % of unique coverage
+                        is removed in the pruning step
+
+    Strategy: candidates are real mounting spots (convex corners looking along
+    the diagonal, long-wall centres). A weighted greedy set-cover picks the best
+    (spot, direction); then redundant cameras are pruned and directions refined.
+
+    `angle_deg` is image-axis (0 = right, 90 = down); `bearing_deg` is compass
+    style with the top of the plan as north.
+    """
     import base64 as _b64
 
-    # de the wall mask produced earlier ------------------------------- deco
+    # ---- decode the wall mask produced earlier ---------------------------
     png = _b64.b64decode(result["cleaned_image_b64"].split(",", 1)[1])
     gray = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
     H, W = gray.shape
@@ -337,20 +425,22 @@ def recommend_cameras(result, fov_deg=90, range_frac=0.8, max_cameras=12,
 
     # ---- room label map -------------------------------------------------
     labels = np.zeros((H, W), np.int32)
-    areas = {}
     for r in result["rooms"]:
         poly = np.array([[int(p[0] * s), int(p[1] * s)] for p in r["polygon"]], np.int32)
         cv2.fillPoly(labels, [poly], int(r["id"]))
     labels[walls] = 0
-    for r in result["rooms"]:
-        areas[r["id"]] = int((labels == r["id"]).sum())
+    areas = {int(r["id"]): int((labels == r["id"]).sum()) for r in result["rooms"]}
     if not areas or sum(areas.values()) == 0:
         return {"cameras": [], "coverage_pct": 0.0, "room_coverage": {},
-                "overlay_b64": None, "warnings": ["No rooms to cover."]}
+                "optional_room_ids": [], "overlay_b64": None,
+                "warnings": ["No rooms to cover."]}
 
     ys, xs = np.where(labels > 0)
-    bsize = max(xs.max() - xs.min(), ys.max() - ys.min())
-    max_r = int(bsize * range_frac)
+    bsize = float(max(xs.max() - xs.min(), ys.max() - ys.min()))
+    if max_range_m and plan_width_m:
+        max_r = int(bsize * max_range_m / float(plan_width_m))
+    else:
+        max_r = int(bsize * range_frac)
     total_area = float(sum(areas.values()))
 
     # ---- target points (what must be seen) -------------------------------
@@ -360,110 +450,150 @@ def recommend_cameras(result, fov_deg=90, range_frac=0.8, max_cameras=12,
     t_room = labels[ty, tx]
     keep = t_room > 0
     tx, ty, t_room = tx[keep].astype(np.float32), ty[keep].astype(np.float32), t_room[keep]
-    required = np.array([
-        (areas[rid] / total_area >= min_room_frac) and (rid not in exclude_room_ids)
-        for rid in t_room])
+    req_room = {rid: (areas[rid] / total_area >= min_room_frac) and (rid not in exclude_room_ids)
+                for rid in areas}
+    required = np.array([req_room[int(rid)] for rid in t_room])
     if not required.any():
         required[:] = True
+        req_room = {rid: True for rid in areas}
+    n_req = float(required.sum())
 
-    # ---- candidate mounting spots: free cells close to walls --------------
+    # ---- candidates + visibility -----------------------------------------
     free = ((labels > 0) & ~walls).astype(np.uint8)
     dt = cv2.distanceTransform(free, cv2.DIST_L2, 3)
-    d_min = max(4.0, bsize * 0.015)
-    step = max(4, int(bsize * 0.02))
-    cy_all, cx_all = np.mgrid[step // 2:H:step, step // 2:W:step]
-    cy_all, cx_all = cy_all.ravel(), cx_all.ravel()
-    dvals = dt[cy_all, cx_all]
-    band = (dvals >= d_min) & (dvals <= d_min + 2.5 * step)
-    cands = list(zip(cx_all[band], cy_all[band]))
-    # room corners pushed inward (best spots for a 90-degree camera)
-    for r in result["rooms"]:
-        poly = np.array(r["polygon"], np.float32) * s
-        cen = np.array([r["centroid"][0] * s, r["centroid"][1] * s], np.float32)
-        for v in poly:
-            vec = cen - v
-            n = np.linalg.norm(vec)
-            if n < 1e-3:
-                continue
-            p = v + vec / n * (d_min * 1.6)
-            px, py = int(p[0]), int(p[1])
-            if 0 <= px < W and 0 <= py < H and free[py, px]:
-                cands.append((px, py))
-    # make sure even tiny rooms have a candidate
-    for rid in areas:
-        yy, xx = np.where(labels == rid)
-        if len(xx):
-            i = int(np.argmax(dt[yy, xx]))
-            cands.append((int(xx[i]), int(yy[i])))
+    d_min = max(4.0, bsize * 0.018)
+    cands = _cam_candidates(result, s, free, dt, labels, d_min, bsize, W, H)
 
-    # ---- visibility of every target from every candidate ------------------
-    vis_list, deg_list, ray_list = [], [], []
-    for (cx, cy) in cands:
-        first = _cam_cast_rays(walls, cx, cy, max_r)
-        dx, dy = tx - cx, ty - cy
+    vis_l, deg_l, ray_l = [], [], []
+    for cd in cands:
+        first = _cam_cast_rays(walls, cd["x"], cd["y"], max_r)
+        dx, dy = tx - cd["x"], ty - cd["y"]
         dist = np.hypot(dx, dy)
-        ang = (np.degrees(np.arctan2(dy, dx)) % 360.0)
+        ang = np.degrees(np.arctan2(dy, dx)) % 360.0
         ridx = (ang * (len(first) / 360.0)).astype(int) % len(first)
-        vis = (dist <= max_r) & (dist <= first[ridx])
-        vis_list.append(vis)
-        deg_list.append(ang.astype(np.int32) % 360)
-        ray_list.append(first)
+        vis_l.append((dist <= max_r) & (dist <= first[ridx]))
+        deg_l.append(ang.astype(np.int32) % 360)
+        ray_l.append(first)
 
-    # ---- greedy set cover over (position, direction) ----------------------
-    covered = np.zeros(len(tx), bool)
-    n_req = float(required.sum())
+    fov = int(fov_deg)
+
+    def allowed_mask(cd):
+        m = np.zeros(360, bool)
+        if cd["pref"] is None:
+            m[:] = True
+        else:
+            for d in range(-cd["spread"], cd["spread"] + 1):
+                m[int(round(cd["pref"] + d)) % 360] = True
+        return m
+
+    allowed = [allowed_mask(cd) for cd in cands]
+
+    def best_direction(ci, cover_count):
+        """Best viewing direction for candidate ci given what is already seen."""
+        w = np.where(cover_count == 0,
+                     np.where(required, 1.0, optional_weight),
+                     np.where(required, -overlap_penalty, 0.0))
+        sel = vis_l[ci]
+        if not sel.any():
+            return 0.0, None
+        hist = np.bincount(deg_l[ci][sel], weights=w[sel], minlength=360)
+        score = _cam_window_gain(hist, fov).astype(np.float64)
+        score[~allowed[ci]] = -1e9
+        c = int(score.argmax())
+        return float(score[c]) * cands[ci]["factor"], c
+
+    def cov_of(ci, c):
+        diff = np.abs((deg_l[ci] - c + 180) % 360 - 180)
+        return vis_l[ci] & (diff <= fov / 2.0)
+
+    # ---- weighted greedy set cover ---------------------------------------
+    count = np.zeros(len(tx), np.int32)
     chosen = []
     for _ in range(max_cameras):
-        uncovered = required & ~covered
-        if uncovered.sum() / n_req <= 1.0 - target_coverage:
+        if (required & (count == 0)).sum() / n_req <= 1.0 - target_coverage:
             break
-        best = (0, None, None)
+        best = (0.0, None, None)
         for ci in range(len(cands)):
-            sel = vis_list[ci] & uncovered
-            if not sel.any():
-                continue
-            gains = _cam_window_gain(np.bincount(deg_list[ci][sel], minlength=360), int(fov_deg))
-            c = int(gains.argmax())
-            if gains[c] > best[0]:
-                best = (int(gains[c]), ci, c)
-        if best[1] is None or best[0] < 0.02 * n_req:
+            sc, c = best_direction(ci, count)
+            if c is not None and sc > best[0]:
+                best = (sc, ci, c)
+        if best[1] is None or best[0] < 0.008 * n_req:
             break
-        gain, ci, c = best
-        diff = np.abs((deg_list[ci] - c + 180) % 360 - 180)
-        cam_cov = vis_list[ci] & (diff <= fov_deg / 2.0)
-        new = cam_cov & ~covered
-        covered |= cam_cov
-        chosen.append((ci, c, cam_cov, int(new.sum())))
+        _, ci, c = best
+        cv = cov_of(ci, c)
+        count += cv
+        chosen.append({"ci": ci, "c": c})
 
-    # ---- build the report -------------------------------------------------
+    # ---- prune cameras that add (almost) nothing unique --------------------
+    changed = True
+    while changed and len(chosen) > 1:
+        changed = False
+        covs = [cov_of(k["ci"], k["c"]) for k in chosen]
+        total = sum(covs)
+        uniq = [(cv & required & (total == 1)).sum() / n_req * 100.0 for cv in covs]
+        j = int(np.argmin(uniq))
+        if uniq[j] < min_unique_pct:
+            chosen.pop(j)
+            changed = True
+
+    # ---- refine directions given the others --------------------------------
+    for _ in range(2):
+        for j, k in enumerate(chosen):
+            others = np.zeros(len(tx), np.int32)
+            for jj, kk in enumerate(chosen):
+                if jj != j:
+                    others += cov_of(kk["ci"], kk["c"])
+            sc, c = best_direction(k["ci"], others)
+            if c is not None:
+                k["c"] = c
+
+    # order: biggest contribution first, then number them
+    running = np.zeros(len(tx), bool)
+    final = []
+    pool = list(chosen)
+    while pool:
+        gains = [(cov_of(k["ci"], k["c"]) & ~running).sum() for k in pool]
+        j = int(np.argmax(gains))
+        k = pool.pop(j)
+        cv = cov_of(k["ci"], k["c"])
+        k["cov"], k["new"] = cv, int((cv & ~running).sum())
+        running |= cv
+        final.append(k)
+    chosen = final
+    covered = running
+
+    # ---- report ----------------------------------------------------------
     room_cov = {}
     for rid in areas:
         m = t_room == rid
         room_cov[int(rid)] = round(float(100.0 * covered[m].mean()), 1) if m.any() else 0.0
 
     cameras = []
-    for k, (ci, c, cam_cov, new) in enumerate(chosen, 1):
-        cx, cy = cands[ci]
+    for n_, k in enumerate(chosen, 1):
+        cd, c = cands[k["ci"]], int(k["c"])
         in_rooms = {}
-        for rid in np.unique(t_room[cam_cov]):
+        for rid in np.unique(t_room[k["cov"]]):
             m = t_room == rid
-            in_rooms[int(rid)] = round(float(100.0 * cam_cov[m].mean()), 1)
-        # wall-clipped field-of-view polygon (original px) -> draw THIS, not a pie slice
-        first = ray_list[ci]
-        fov_poly = [[int(px / s), int(py / s)]
-                    for px, py in _cam_sweep(first, c, fov_deg, cx, cy, 1.0)]
+            in_rooms[int(rid)] = round(float(100.0 * k["cov"][m].mean()), 1)
+        poly = [[int(px / s), int(py / s)]
+                for px, py in _cam_sweep(ray_l[k["ci"]], c, fov, cd["x"], cd["y"], 1.0)]
+        why = {"corner": "corner mount, looking along the diagonal",
+               "wall": "wall mount, looking into the room",
+               "center": "central mount (no good corner)"}[cd["kind"]]
         cameras.append({
-            "id": k,
-            "fov_polygon": fov_poly,
-            "position": [int(cx / s), int(cy / s)],          # original px coords
-            "room_id": int(labels[int(cy), int(cx)]),
-            "angle_deg": int(c),
+            "id": n_,
+            "fov_polygon": poly,
+            "position": [int(cd["x"] / s), int(cd["y"] / s)],
+            "room_id": int(cd["room"]),
+            "mount": cd["kind"],
+            "placement": why,
+            "angle_deg": c,
             "bearing_deg": int((c + 90) % 360),
-            "fov_deg": int(fov_deg),
+            "fov_deg": fov,
             "range_px": int(max_r / s),
-            "range_m": round(max_r / float(bsize) * plan_width_m, 1) if plan_width_m else None,
+            "range_m": round(max_r / bsize * plan_width_m, 1) if plan_width_m else None,
             "sees_rooms_pct": in_rooms,
-            "new_coverage_pct": round(100.0 * new / len(tx), 1),
+            "new_coverage_pct": round(100.0 * k["new"] / len(tx), 1),
         })
 
     # ---- overlay image ----------------------------------------------------
@@ -472,30 +602,27 @@ def recommend_cameras(result, fov_deg=90, range_frac=0.8, max_cameras=12,
     layer = canvas.copy()
     palette = [(255, 160, 60), (80, 200, 120), (70, 70, 230), (200, 90, 200),
                (40, 190, 230), (160, 120, 40), (120, 120, 255), (200, 200, 60)]
-    n_rays = 720
-    for k, (ci, c, _, _) in enumerate(chosen):
-        cx, cy = cands[ci]
-        first = ray_list[ci]
-        col = palette[k % len(palette)]
-        pts = _cam_sweep(first, c, fov_deg, cx, cy)
-        cv2.fillPoly(layer, [np.array(pts, np.int32)], col)
+    for n_, k in enumerate(chosen):
+        cd = cands[k["ci"]]
+        pts = _cam_sweep(ray_l[k["ci"]], k["c"], fov, cd["x"], cd["y"])
+        cv2.fillPoly(layer, [np.array(pts, np.int32)], palette[n_ % len(palette)])
     canvas = cv2.addWeighted(layer, 0.35, canvas, 0.65, 0)
     canvas[walls] = (0, 0, 0)
-    for k, (ci, c, _, _) in enumerate(chosen, 1):
-        cx, cy = cands[chosen[k - 1][0]]
+    for n_, k in enumerate(chosen, 1):
+        cd, c = cands[k["ci"]], k["c"]
+        cx, cy = cd["x"], cd["y"]
         tip = (int(cx + 22 * np.cos(np.radians(c))), int(cy + 22 * np.sin(np.radians(c))))
-        cv2.arrowedLine(canvas, (int(cx), int(cy)), tip, (0, 0, 200), 2, tipLength=0.4)
-        cv2.circle(canvas, (int(cx), int(cy)), 7, (0, 0, 200), -1)
-        cv2.putText(canvas, str(k), (int(cx) + 8, int(cy) - 8),
+        cv2.arrowedLine(canvas, (cx, cy), tip, (0, 0, 200), 2, tipLength=0.4)
+        cv2.circle(canvas, (cx, cy), 7, (0, 0, 200), -1)
+        cv2.putText(canvas, str(n_), (cx + 8, cy - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 200), 2)
     _, buf = cv2.imencode(".png", canvas)
 
-    skipped = [int(rid) for rid in areas
-               if areas[rid] / total_area < min_room_frac or rid in exclude_room_ids]
+    skipped = [int(rid) for rid in areas if not req_room[rid]]
     warnings = []
     total_cov = round(float(100.0 * covered[required].mean()), 1)
     if total_cov < 100.0 * target_coverage:
-        warnings.append("Target coverage not reached: raise max_cameras or range_frac.")
+        warnings.append("Target coverage not reached: raise max_cameras or range.")
     return {
         "cameras": cameras,
         "coverage_pct": total_cov,

@@ -7,8 +7,6 @@ import {
 } from '../api/plannerApi';
 
 // --- PHASE 2 IMPORTS ---
-import { analyzeFloorPlan } from '../api/plannerPhase2';
-import FloorPlanAnalysisViewer from '../components/FloorPlanAnalysisViewer';
 import CctvOptimizationPanel from '../components/CctvOptimizationPanel';
 
 const MAX_MB = 20; // miroir de PLANNER_MAX_UPLOAD_MB ; le serveur reste l'autorité
@@ -27,10 +25,6 @@ export default function Planner() {
   const [image, setImage] = useState(null); // { id, url }
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [busy, setBusy] = useState(false);
-
-  // --- PHASE 2 STATE ---
-  const [analysis, setAnalysis] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
 
   const [form, setForm] = useState({ name: '', budget: '', currency: 'TND' });
   const [file, setFile] = useState(null);
@@ -65,7 +59,6 @@ export default function Planner() {
         if (cancelled) return;
         setFloorPlans(plans);
         setActivePlan(plans[0] || null);
-        setAnalysis(null); // Reset analysis when switching projects
       })
       .catch((err) => !cancelled && fail(err, 'Impossible de charger les plans.'));
     return () => { cancelled = true; };
@@ -89,7 +82,6 @@ export default function Planner() {
   const selectProject = (id) => {
     setFloorPlans([]);
     setActivePlan(null);
-    setAnalysis(null);
     setMsg({ type: '', text: '' });
     setSelectedId(id);
   };
@@ -152,22 +144,6 @@ export default function Planner() {
     }
   };
 
-  // --- PHASE 2 LOGIC ---
-  const handleAnalyze = async () => {
-    if (!activePlan) return;
-    setAnalyzing(true);
-    setMsg({ type: '', text: '' });
-    try {
-      const res = await analyzeFloorPlan(activePlan.id);
-      setAnalysis(res.result_json);
-      setMsg({ type: 'success', text: 'Analyse terminée avec succès.' });
-    } catch (err) {
-      fail(err, "Échec de l'analyse du plan.");
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F4F6F8]">
       <Navbar
@@ -211,7 +187,7 @@ export default function Planner() {
           </div>
         </section>
 
-        {/* ── Colonne droite : import PDF + aperçu ── */}
+        {/* ── Colonne droite : import PDF + aperçu + CCTV ── */}
         <section className="space-y-6">
           {msg.text && (
             <div role="alert" className={`rounded-xl px-4 py-3 text-sm font-medium ${msg.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -249,7 +225,6 @@ export default function Planner() {
                     <select className={inputCls} value={activePlan.id}
                       onChange={(e) => {
                         setActivePlan(floorPlans.find((f) => f.id === Number(e.target.value)));
-                        setAnalysis(null); // reset analysis if changing images
                       }}>
                       {floorPlans.map((f) => (
                         <option key={f.id} value={f.id}>{f.original_filename} — page {f.selected_page}</option>
@@ -263,43 +238,15 @@ export default function Planner() {
                     <div><dt className="text-gray-500">Taille</dt><dd className="font-semibold">{(activePlan.file_size / 1024).toFixed(0)} Ko</dd></div>
                   </dl>
 
-                  {/* --- PHASE 2 UI: ACTION BAR --- */}
-                  <div className="flex justify-between items-center border-t border-gray-100 pt-4">
-                    <span className="text-sm font-semibold text-[#0B1F3A]">Analyse du plan</span>
-                    {/* FIXED: Added type="button" so it doesn't submit the form or trigger a page reload */}
-                    <button
-                      type="button" 
-                      onClick={handleAnalyze}
-                      disabled={analyzing || !imageUrl}
-                      className={btnCls}
-                    >
-                      {analyzing ? 'Analyse en cours…' : 'Analyser le plan (OpenCV)'}
-                    </button>
+                  {/* --- PHASE 2 UI: one-click analyze + optimize + overlay --- */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <CctvOptimizationPanel
+                      key={activePlan.id}
+                      projectId={selectedId}
+                      floorPlanId={activePlan.id}
+                      imageUrl={imageUrl}
+                    />
                   </div>
-
-                  {/* --- PHASE 2 UI: IMAGE VIEWER --- */}
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-2 overflow-auto max-h-[70vh]">
-                    {imageUrl ? (
-                      analysis ? (
-                        <FloorPlanAnalysisViewer imageUrl={imageUrl} analysis={analysis} />
-                      ) : (
-                        <img src={imageUrl} alt={`Plan ${activePlan.original_filename}`} className="mx-auto max-w-full h-auto" />
-                      )
-                    ) : (
-                      <p className="text-sm text-gray-500 p-6 text-center">Chargement de l'image…</p>
-                    )}
-                  </div>
-
-                  {/* --- PHASE 2 UI: OPTIMIZATION PANEL --- */}
-                  {analysis && (
-                    <div className="border-t border-gray-100 pt-4">
-                      <CctvOptimizationPanel
-                        projectId={selectedId}
-                        imageUrl={imageUrl}
-                        analysis={analysis}
-                      />
-                    </div>
-                  )}
                 </div>
               )}
             </>

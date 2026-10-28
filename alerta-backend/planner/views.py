@@ -1,5 +1,5 @@
 import os
-import traceback  # <--- ADDED FOR DEBUGGING
+import traceback
 from django.http import FileResponse
 from rest_framework import generics, parsers, status
 from rest_framework.exceptions import NotFound
@@ -12,18 +12,25 @@ from .models import (
 )
 from .serializers import (
     FloorPlanSerializer, FloorPlanUploadSerializer, ProjectSerializer,
-    FloorPlanAnalysisSerializer, CameraOptimizationSerializer, OptimizationRequestSerializer
+    FloorPlanAnalysisSerializer, CameraOptimizationSerializer,
+    OptimizationRequestSerializer,
 )
-from .services.floorplan_analysis import analyse_floor_plan
-from .services.cctv_optimizer import optimize_cameras
+from .services.floorplan_analysis import analyse_floor_plan, recommend_cameras
 
 
-# ==============================================================================
-# EXISTING VIEWS (Phase 1)
-# ==============================================================================
 
-# Autorisation : un utilisateur ne voit/modifie que SES projets (404 sinon, pour ne pas
-# révéler l'existence d'un projet). Les plans d'étage sont privés, y compris pour les admins.
+
+MAX_CAMERAS_FOR_PLAN   = 20
+DEFAULT_CAMERA_PRICE   = 120.0
+DEFAULT_FOV_DEG        = 90.0
+DEFAULT_RANGE_FRAC     = 0.9
+DEFAULT_TARGET_COVER   = 0.93
+DEFAULT_MIN_ROOM_FRAC  = 0.03
+
+
+
+
+
 
 class ProjectListCreateView(generics.ListCreateAPIView):
     serializer_class = ProjectSerializer
@@ -90,9 +97,6 @@ class FloorPlanImageView(generics.GenericAPIView):
         return response
 
 
-# ==============================================================================
-# PHASE 2 VIEWS (Analysis & Optimization)
-# ==============================================================================
 
 def _owned_floor_plan(request, fp_id):
     fp = FloorPlan.objects.select_related("project").filter(pk=fp_id).first()
@@ -117,23 +121,22 @@ class AnalyseFloorPlanView(APIView):
         if fp is None:
             return Response({"detail": "Not found."},
                             status=status.HTTP_404_NOT_FOUND)
-        
+
         path = _image_path(fp)
         if path is None:
             return Response({"detail": "Floor plan image missing or unconverted."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             result = analyse_floor_plan(path)
         except ValueError as e:
             return Response({"detail": str(e)},
                             status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # ADDED: This will print the exact error to your Django terminal
             traceback.print_exc()
             return Response({"detail": f"Analysis failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
         obj, _ = FloorPlanAnalysis.objects.update_or_create(
             floor_plan=fp,
             defaults={"result_json": result,
@@ -159,6 +162,24 @@ class FloorPlanAnalysisDetailView(APIView):
 
 
 class OptimizeCamerasView(APIView):
+    """
+    Budget-constrained CCTV placement using the ray-cast / greedy set-cover
+    planner in `floorplan_analysis.recommend_cameras`.
+
+    The request body mirrors the old shape so existing clients keep working:
+
+        { "budget": 1000,
+          "camera_config": { "price": 120, "fov_deg": 90,
+                             "range_frac": 0.8, "target_coverage": 0.93,
+                             "min_room_frac": 0.03,
+                             "exclude_room_ids": [4, 7],
+                             "plan_width_m": 12.5 } }
+
+    The result dict now contains:
+        cameras[], coverage_pct, room_coverage, optional_room_ids,
+        overlay_b64, total_cost, remaining_budget, warnings,
+        camera_config_used
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_id):
@@ -166,34 +187,114 @@ class OptimizeCamerasView(APIView):
         if project is None:
             return Response({"detail": "Not found."},
                             status=status.HTTP_404_NOT_FOUND)
-        
+
         s = OptimizationRequestSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        budget = s.validated_data["budget"]
-        cfg = s.validated_data.get("camera_config", {})
-        
+        budget = float(s.validated_data["budget"])
+        cfg = s.validated_data.get("camera_config") or {}
+
         fp = FloorPlan.objects.filter(project=project).first()
         if fp is None:
             return Response({"detail": "Project has no floor plan."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
-            a = fp.analysis
+            analysis = fp.analysis
         except FloorPlanAnalysis.DoesNotExist:
             return Response({"detail": "Run analysis first."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
+
+        # ------------------------------------------------------------------
+        # Parse / validate camera_config
+        # ------------------------------------------------------------------
         try:
-            result = optimize_cameras(a.result_json, budget, cfg)
+            price         = float(cfg.get("price", DEFAULT_CAMERA_PRICE))
+            fov_deg       = float(cfg.get("fov_deg", DEFAULT_FOV_DEG))
+            range_frac    = float(cfg.get("range_frac", DEFAULT_RANGE_FRAC))
+            target_cover  = float(cfg.get("target_coverage", DEFAULT_TARGET_COVER))
+            min_room_frac = float(cfg.get("min_room_frac", DEFAULT_MIN_ROOM_FRAC))
+            exclude_ids   = tuple(int(x) for x in (cfg.get("exclude_room_ids") or ()))
+            plan_width_m  = cfg.get("plan_width_m")
+            if plan_width_m is not None:
+                plan_width_m = float(plan_width_m)
+        except (TypeError, ValueError) as e:
+            return Response({"detail": f"Invalid camera_config: {e}"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if price <= 0:
+            return Response({"detail": "Camera price must be positive."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not (0 < fov_deg <= 360):
+            return Response({"detail": "fov_deg must be in (0, 360]."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if range_frac <= 0:
+            return Response({"detail": "range_frac must be positive."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not (0 < target_cover <= 1):
+            return Response({"detail": "target_coverage must be in (0, 1]."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not (0 <= min_room_frac <= 1):
+            return Response({"detail": "min_room_frac must be in [0, 1]."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # ------------------------------------------------------------------
+        # budget → max number of cameras (capped at MAX_CAMERAS_FOR_PLAN)
+        # ------------------------------------------------------------------
+        max_cams = min(MAX_CAMERAS_FOR_PLAN, int(budget // price))
+        if max_cams <= 0:
+            empty = {
+                "cameras": [],
+                "coverage_pct": 0.0,
+                "room_coverage": {},
+                "optional_room_ids": [],
+                "overlay_b64": None,
+                "total_cost": 0.0,
+                "remaining_budget": round(budget, 2),
+                "warnings": ["Budget is below the cost of a single camera."],
+                "camera_config_used": cfg,
+            }
+            obj = CameraOptimization.objects.create(
+                project=project, budget=budget, camera_config=cfg,
+                result_json=empty)
+            return Response(CameraOptimizationSerializer(obj).data,
+                            status=status.HTTP_201_CREATED)
+
+        # ------------------------------------------------------------------
+        # Run the planner
+        # ------------------------------------------------------------------
+        try:
+            result = recommend_cameras(
+                analysis.result_json,
+                fov_deg=fov_deg,
+                range_frac=range_frac,
+                max_cameras=max_cams,
+                target_coverage=target_cover,
+                min_room_frac=min_room_frac,
+                exclude_room_ids=exclude_ids,
+                plan_width_m=plan_width_m,
+            )
         except ValueError as e:
             return Response({"detail": str(e)},
                             status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # ADDED: This will print the exact error to your Django terminal
             traceback.print_exc()
             return Response({"detail": f"Optimization failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+        # Budget accounting is not done inside recommend_cameras (it works on
+        # camera count), so we attach it here.
+        result["total_cost"]       = round(price * len(result["cameras"]), 2)
+        result["remaining_budget"] = round(budget - result["total_cost"], 2)
+        result["camera_config_used"] = {
+            "price": price,
+            "fov_deg": fov_deg,
+            "range_frac": range_frac,
+            "target_coverage": target_cover,
+            "min_room_frac": min_room_frac,
+            "exclude_room_ids": list(exclude_ids),
+            "plan_width_m": plan_width_m,
+        }
+
         obj = CameraOptimization.objects.create(
             project=project, budget=budget, camera_config=cfg,
             result_json=result)
@@ -217,7 +318,8 @@ class OptimizationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, optimization_id):
-        opt = CameraOptimization.objects.select_related("project").filter(pk=optimization_id).first()
+        opt = CameraOptimization.objects.select_related("project").filter(
+            pk=optimization_id).first()
         if opt is None or opt.project.owner_id != request.user.id:
             return Response({"detail": "Not found."},
                             status=status.HTTP_404_NOT_FOUND)

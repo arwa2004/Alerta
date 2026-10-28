@@ -1,24 +1,21 @@
 import React from "react";
 
-export default function FloorPlanAnalysisViewer({ analysis }) {
-  if (!analysis || !analysis.cleaned_image_b64) {
-    return <div style={{ color: "#b00" }}>No analysis available.</div>;
+export default function FloorPlanAnalysisViewer({ analysis, overrideImage }) {
+  const src = overrideImage || analysis?.cleaned_image_b64;
+  if (!src) {
+    return <div className="text-red-600 text-sm">No analysis available.</div>;
   }
 
   return (
-    <div style={{ position: "relative", maxWidth: "100%", background: "#fff", padding: "10px", borderRadius: "8px", textAlign: "center" }}>
-      
-      <div style={{ color: "#0B1F3A", fontWeight: "bold", marginBottom: "10px" }}>
-        Cleaned Floor Plan
+    <div className="bg-white rounded-2xl shadow-sm p-3">
+      <div className="text-sm font-semibold text-[#0B1F3A] mb-2">
+        {overrideImage ? "Optimized Plan" : "Cleaned Floor Plan"}
       </div>
-
-      {/* Display only the clean image */}
-      <img 
-        src={analysis.cleaned_image_b64} 
-        alt="Cleaned Floor Plan" 
-        style={{ width: "100%", display: "block", border: "1px solid #ccc" }} 
+      <img
+        src={src}
+        alt="Floor plan"
+        className="w-full max-h-[70vh] object-contain rounded-xl border border-gray-100 bg-gray-50"
       />
-      
     </div>
   );
 }
