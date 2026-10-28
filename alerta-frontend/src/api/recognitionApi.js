@@ -74,6 +74,13 @@ export const personsApi = {
   removeFace: (id, faceId) => axiosClient.delete(`persons/${id}/faces/${faceId}/`, cfg()),
 };
 
+export const videosApi = {
+  list: (params) => data(axiosClient.get('videos/', cfg({ params }))),
+  get: (id) => data(axiosClient.get(`videos/${id}/`, cfg())),
+  remove: (id) => axiosClient.delete(`videos/${id}/`, cfg()),
+  searchUnknown: (payload) => data(axiosClient.post('videos/search-unknown/', payload, cfg())),
+};
+
 /** Les photos sont protégées : on les récupère avec le jeton JWT (blob). */
 export const fetchImageBlob = (url) =>
   axiosClient.get(url, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data));
