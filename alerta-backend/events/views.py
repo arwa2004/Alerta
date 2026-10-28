@@ -136,17 +136,22 @@ class EvenementGenererImageView(APIView):
         except Evenement.DoesNotExist:
             return Response({'detail': "Événement non trouvé."}, status=status.HTTP_404_NOT_FOUND)
 
-        resultat_generation = AlertaAIService.generer_image_reconstitution(evenement)
+        # generer_image_reconstitution retourne un tuple (success: bool, message: str)
+        resultat_success, resultat_message = AlertaAIService.generer_image_reconstitution(evenement)
 
-        if not resultat_generation['success']:
+        if not resultat_success:
+            # Rechargement depuis la DB pour avoir le dernier état (image existante conservée)
+            evenement.refresh_from_db()
             data = EvenementSerializer(evenement, context={'request': request}).data
             data['ia_success'] = False
-            data['ia_message'] = resultat_generation.get('message', "Service IA saturé.")
+            data['ia_message'] = resultat_message or "Service IA saturé."
             return Response(data, status=status.HTTP_200_OK)
 
-        evenement.save()
+        # Si succès, l'image a déjà été sauvée dans generer_image_reconstitution via save(update_fields=...)
+        evenement.refresh_from_db()
         data = EvenementSerializer(evenement, context={'request': request}).data
         data['ia_success'] = True
+        data['ia_message'] = resultat_message or "Image générée avec succès."
         return Response(data)
 
 
