@@ -8,12 +8,12 @@ class MediaSerializer(serializers.ModelSerializer):
     zone_nom = serializers.CharField(source="zone.name", read_only=True)
     nb_visages = serializers.SerializerMethodField()
     alerte = serializers.SerializerMethodField()
-
+    qualite = serializers.SerializerMethodField()
     class Meta:
         model = Media
         fields = ["id", "zone", "zone_nom", "fichier", "nom_original", "type", "statut",
                   "taille", "date_upload", "date_traitement", "nb_visages", "alerte",
-                  "message_erreur"]
+                  "qualite", "message_erreur"]
         read_only_fields = ["id", "nom_original", "type", "statut", "taille", "date_upload",
                             "date_traitement", "message_erreur"]
 
@@ -22,7 +22,13 @@ class MediaSerializer(serializers.ModelSerializer):
 
     def get_alerte(self, obj):
         return (obj.resultats or {}).get("alert_triggered", False)
-
+    
+    def get_qualite(self, obj):
+        q = (obj.resultats or {}).get("qualite")
+        if not q:
+            return None
+        conseils = q.get("conseils") or []
+        return {"score": q["score"], "niveau": q["niveau"], "conseil": conseils[0] if conseils else ""}
     def validate_zone(self, zone):
         # Isolation des données : on ne peut uploader que dans SES zones
         if zone.owner_id != self.context["request"].user.id:

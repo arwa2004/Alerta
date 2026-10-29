@@ -13,6 +13,13 @@ export const STATUTS = {
   erreur: { label: 'Erreur', cls: 'bg-red-50 text-[#E63946]' },
 };
 
+// ← QUALITÉ : niveaux de qualité de l'image
+export const QUALITE = {
+  bonne: { label: 'Bonne qualité', cls: 'bg-green-50 text-green-700' },
+  moyenne: { label: 'Qualité moyenne', cls: 'bg-orange-50 text-orange-600' },
+  insuffisante: { label: 'Qualité insuffisante', cls: 'bg-red-50 text-[#E63946]' },
+};
+
 const FILTRES = [
   { id: 'tous', label: 'Tous' },
   { id: 'en_cours', label: 'En cours' },
@@ -55,6 +62,7 @@ export default function Medias({ onGoZones }) {
   const [envoi, setEnvoi] = useState(false);
   const [survol, setSurvol] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [detailQualite, setDetailQualite] = useState(null); // ← QUALITÉ (popup)
   const [aSupprimer, setASupprimer] = useState(null);
   const [analyses, setAnalyses] = useState([]);          // ← AUTH
   const [detailAuth, setDetailAuth] = useState(null);    // ← AUTH
@@ -119,6 +127,7 @@ export default function Medias({ onGoZones }) {
     try {
       await supprimerMedia(id);
       if (detail?.id === id) setDetail(null);
+      if (detailQualite?.id === id) setDetailQualite(null);
       charger();
     } catch {
       setErreur('Suppression impossible.');
@@ -127,6 +136,10 @@ export default function Medias({ onGoZones }) {
 
   const ouvrirDetail = (id) =>
     detailMedia(id).then((r) => setDetail(r.data)).catch(() => setErreur('Détails indisponibles.'));
+
+  // ← QUALITÉ : charge le détail complet puis ouvre la popup
+  const ouvrirQualite = (id) =>
+    detailMedia(id).then((r) => setDetailQualite(r.data)).catch(() => setErreur('Détail de la qualité indisponible.'));
 
   const relancer = (id) => reanalyserMedia(id).then(charger).catch(() => setErreur('Réanalyse impossible.'));
 
@@ -283,6 +296,17 @@ export default function Medias({ onGoZones }) {
                     {m.statut === 'termine' && (
                       <span className="text-xs font-semibold text-[#4A5568]">{m.nb_visages} visage(s)</span>
                     )}
+                    {/* ← QUALITÉ : badge cliquable */}
+                    {m.qualite && QUALITE[m.qualite.niveau] && (
+                      <button
+                        type="button"
+                        onClick={() => ouvrirQualite(m.id)}
+                        title="Cliquez pour voir le détail de la qualité"
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-full cursor-pointer hover:opacity-75 transition ${QUALITE[m.qualite.niveau].cls}`}
+                      >
+                        Qualité {m.qualite.score}/100 ›
+                      </button>
+                    )}
                     {/* ← AUTH : verdict d'authenticité */}
                     {auth?.statut === 'termine' && va && (
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${va.cls}`}>{va.label}</span>
@@ -290,6 +314,11 @@ export default function Medias({ onGoZones }) {
                   </div>
 
                   {m.statut === 'erreur' && <p className="text-xs text-[#E63946] leading-relaxed">{m.message_erreur}</p>}
+
+                  {/* ← QUALITÉ : conseil d'amélioration */}
+                  {m.qualite && m.qualite.niveau !== 'bonne' && m.qualite.conseil && (
+                    <p className="text-xs text-orange-600 leading-relaxed">Conseil : {m.qualite.conseil}</p>
+                  )}
 
                   <div className="flex gap-2 pt-3 mt-auto border-t border-[#E7EBEF]">
                     {m.statut === 'termine' && (
@@ -363,7 +392,16 @@ export default function Medias({ onGoZones }) {
       )}
 
       {/* ── Modale des résultats ── */}
-      {detail && <ModaleResultats media={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <ModaleResultats
+          media={detail}
+          onClose={() => setDetail(null)}
+          onDetailQualite={() => setDetailQualite(detail)}
+        />
+      )}
+
+      {/* ← QUALITÉ : popup de détail */}
+      {detailQualite && <ModaleQualite media={detailQualite} onClose={() => setDetailQualite(null)} />}
 
       {/* ← AUTH : modale d'authenticité */}
       {detailAuth && <ModaleAuthenticite analyse={detailAuth} onClose={() => setDetailAuth(null)} />}
@@ -371,12 +409,219 @@ export default function Medias({ onGoZones }) {
   );
 }
 
-export function ModaleResultats({ media, onClose }) {
+// ← QUALITÉ : barre de progression d'un critère de qualité
+function BarreQualite({ titre, score, detail }) {
+  const couleur = score >= 75 ? 'bg-green-500' : score >= 50 ? 'bg-orange-400' : 'bg-[#E63946]';
+  return (
+    <div>
+      <div className="flex justify-between text-xs font-semibold text-[#0B1F3A] mb-1">
+        <span>{titre}</span>
+        <span className="text-[#4A5568]">{detail}</span>
+      </div>
+      <div className="h-2 rounded-full bg-[#E7EBEF]">
+        <div className={`h-2 rounded-full ${couleur}`} style={{ width: `${score}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// ← QUALITÉ : critères, poids dans le score et explications
+// (les poids doivent rester identiques à ceux de medias/services/qualite.py)
+const CRITERES = [
+  {
+    cle: 'nettete', titre: 'Netteté', poids: 40,
+    mesure: (m) => `indice ${m.nettete}`,
+    explication: "Mesure la précision des contours (variance du Laplacien). C'est le critère le plus important : un visage flou ne peut pas être identifié.",
+    seuils: 'Net à partir de 100 ; légèrement flou entre 40 et 100 ; très flou sous 40.',
+  },
+  {
+    cle: 'luminosite', titre: 'Luminosité', poids: 25,
+    mesure: (m) => `${m.luminosite}/255`,
+    explication: "Mesure l'éclairage moyen de l'image. Une image trop sombre ou trop claire cache les traits du visage.",
+    seuils: 'Idéal entre 90 et 170 ; trop sombre sous 80 ; surexposée au-dessus de 190.',
+  },
+  {
+    cle: 'contraste', titre: 'Contraste', poids: 15,
+    mesure: (m) => `écart ${m.contraste}`,
+    explication: 'Mesure la différence entre les zones claires et sombres. Un contraste faible donne une image délavée ou brumeuse.',
+    seuils: 'Bon à partir de 45 ; faible sous 25 ; très faible sous 12.',
+  },
+  {
+    cle: 'resolution', titre: 'Résolution', poids: 20,
+    mesure: (m) => `${m.largeur}×${m.hauteur}`,
+    explication: "Mesure le nombre de pixels (plus petit côté de l'image). Peu de pixels, c'est peu de détails sur les visages.",
+    seuils: 'Note maximale à partir de 720 px ; faible sous 480 px ; insuffisante sous 360 px.',
+  },
+];
+
+const etatCritere = (score) =>
+  score >= 75
+    ? { label: 'Bon', cls: 'bg-green-50 text-green-700', barre: 'bg-green-500' }
+    : score >= 50
+      ? { label: 'Moyen', cls: 'bg-orange-50 text-orange-600', barre: 'bg-orange-400' }
+      : { label: 'Faible', cls: 'bg-red-50 text-[#E63946]', barre: 'bg-[#E63946]' };
+
+const GRAVITE = {
+  haute: { label: 'Majeur', cls: 'bg-red-50 text-[#E63946]' },
+  moyenne: { label: 'Modéré', cls: 'bg-orange-50 text-orange-600' },
+};
+
+// ← QUALITÉ : popup « pourquoi cette note ? »
+export function ModaleQualite({ media, onClose }) {
+  const q = media.resultats?.qualite;
+  const fermer = (e) => e.stopPropagation();
+
+  if (!q) {
+    return (
+      <div className="fixed inset-0 bg-[#0B1F3A]/50 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+        <div className="bg-white rounded-3xl p-8 max-w-sm text-center" onClick={fermer}>
+          <p className="text-sm text-[#4A5568]">Aucune évaluation de qualité pour ce média. Cliquez sur « Réanalyser ».</p>
+          <button type="button" onClick={onClose}
+            className="mt-4 px-4 py-2 rounded-xl border border-[#D8DEE4] text-xs font-bold cursor-pointer">Fermer</button>
+        </div>
+      </div>
+    );
+  }
+
+  const lignes = CRITERES.map((c) => {
+    const note = q.scores[c.cle];
+    const points = (note * c.poids) / 100;
+    return { ...c, note, points, perdus: c.poids - points, etat: etatCritere(note) };
+  });
+  const total = lignes.reduce((n, l) => n + l.points, 0);
+  const plafonne = q.problemes?.some((p) => p.gravite === 'haute') && total > q.score + 1;
+  const pertes = lignes.filter((l) => l.perdus >= 1).sort((a, b) => b.perdus - a.perdus);
+  const niveau = QUALITE[q.niveau];
+
+  return (
+    <div className="fixed inset-0 bg-[#0B1F3A]/50 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+      <div className="bg-white rounded-3xl border border-[#D8DEE4] shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-y-auto" onClick={fermer}>
+        {/* En-tête */}
+        <div className="flex items-start justify-between gap-4 p-6 border-b border-[#E7EBEF]">
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-[#0B1F3A]">Détail de la qualité</h3>
+            <p className="text-xs text-[#4A5568] mt-0.5 truncate">{media.nom_original}</p>
+          </div>
+          <button type="button" onClick={onClose}
+            className="text-2xl leading-none text-[#4A5568] hover:text-[#0B1F3A] cursor-pointer">×</button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Score et verdict */}
+          <div className="flex items-center gap-5">
+            <div className="w-24 h-24 rounded-full border-8 border-[#E7EBEF] flex flex-col items-center justify-center flex-shrink-0">
+              <span className="text-3xl font-extrabold text-[#0B1F3A] leading-none">{q.score}</span>
+              <span className="text-[11px] text-[#4A5568]">/ 100</span>
+            </div>
+            <div>
+              {niveau && <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${niveau.cls}`}>{niveau.label}</span>}
+              <p className="text-sm text-[#4A5568] mt-2">{q.fiabilite}</p>
+            </div>
+          </div>
+
+          {/* Pourquoi cette note ? */}
+          <section className="bg-[#F4F6F8] rounded-2xl p-4">
+            <h4 className="font-bold text-[#0B1F3A] mb-1.5">Pourquoi {q.score}/100 ?</h4>
+            {pertes.length === 0 ? (
+              <p className="text-sm text-[#4A5568]">
+                Tous les critères sont bons : l'image est nette, bien éclairée et suffisamment détaillée.
+              </p>
+            ) : (
+              <p className="text-sm text-[#4A5568] leading-relaxed">
+                Il manque {100 - q.score} points sur 100 :{' '}
+                {pertes.map((l, i) => (
+                  <span key={l.cle}>
+                    {i > 0 && ', '}
+                    <b className="text-[#0B1F3A]">{l.titre.toLowerCase()}</b> (−{Math.round(l.perdus)} pt{Math.round(l.perdus) > 1 ? 's' : ''})
+                  </span>
+                ))}
+                . Le point le plus à améliorer est la <b className="text-[#0B1F3A]">{pertes[0].titre.toLowerCase()}</b>.
+              </p>
+            )}
+            {plafonne && (
+              <p className="text-xs text-[#E63946] mt-2 font-semibold">
+                Le score est plafonné à 49 : un défaut majeur rend l'image insuffisante, même si les autres critères sont bons.
+              </p>
+            )}
+          </section>
+
+          {/* Calcul critère par critère */}
+          <section>
+            <h4 className="font-bold text-[#0B1F3A] mb-3">Calcul détaillé</h4>
+            <div className="space-y-4">
+              {lignes.map((l) => (
+                <div key={l.cle} className="border border-[#E7EBEF] rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#0B1F3A] text-sm">{l.titre}</span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${l.etat.cls}`}>{l.etat.label}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-[#4A5568]">mesuré : {l.mesure(q.mesures)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[#E7EBEF] mt-3">
+                    <div className={`h-2 rounded-full ${l.etat.barre}`} style={{ width: `${l.note}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs mt-2 font-semibold">
+                    <span className="text-[#4A5568]">Note {l.note}/100 × poids {l.poids} %</span>
+                    <span className="text-[#0B1F3A]">{l.points.toFixed(1)} / {l.poids} pts</span>
+                  </div>
+                  <p className="text-xs text-[#4A5568] mt-2 leading-relaxed">{l.explication}</p>
+                  <p className="text-[11px] text-[#8FA3B8] mt-1">Repères : {l.seuils}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center mt-4 px-4 py-3 rounded-xl bg-[#0B1F3A] text-white text-sm font-bold">
+              <span>Total</span>
+              <span>{plafonne ? `${total.toFixed(1)} → plafonné à ${q.score}` : `${q.score}`} / 100</span>
+            </div>
+          </section>
+
+          {/* Problèmes et conseils */}
+          {q.problemes?.length > 0 && (
+            <section>
+              <h4 className="font-bold text-[#0B1F3A] mb-3">Problèmes détectés et conseils</h4>
+              <ul className="space-y-2">
+                {q.problemes.map((p, i) => {
+                  const g = GRAVITE[p.gravite] || GRAVITE.moyenne;
+                  return (
+                    <li key={i} className="flex items-start gap-3 bg-orange-50 rounded-xl px-4 py-3">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${g.cls}`}>{g.label}</span>
+                      <span className="text-xs text-[#0B1F3A] leading-relaxed">{p.conseil}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          {/* Informations complémentaires */}
+          <section className="text-xs text-[#4A5568] space-y-1">
+            {q.mesures.taille_visage && (
+              <p>
+                Taille médiane des visages détectés : <b className="text-[#0B1F3A]">{q.mesures.taille_visage} px</b> (minimum fiable : 60 px).
+              </p>
+            )}
+            {q.mesures.images_analysees > 1 && (
+              <p>
+                Valeurs médianes calculées sur <b className="text-[#0B1F3A]">{q.mesures.images_analysees} images</b> extraites de la vidéo.
+              </p>
+            )}
+            <p>Formule : 40 % netteté + 25 % luminosité + 20 % résolution + 15 % contraste. Les seuils sont indicatifs.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ModaleResultats({ media, onClose, onDetailQualite }) {
   const r = media.resultats || {};
   const connus = r.known_snapshots || [];
   const inconnus = r.unknown_snapshots || [];
   const visagesPhoto = r.faces || [];
   const mouvement = r.mouvement || {};
+  const q = r.qualite; // ← QUALITÉ
 
   return (
     <div className="fixed inset-0 bg-[#0B1F3A]/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -397,6 +642,40 @@ export function ModaleResultats({ media, onClose }) {
             <Tuile titre="Connus" valeur={(r.known_persons || []).length} />
             <Tuile titre="Mouvement" valeur={mouvement.detecte ? 'Oui' : 'Non'} />
           </div>
+
+          {/* ← QUALITÉ : évaluation de la qualité de l'image */}
+          {q && QUALITE[q.niveau] && (
+            <section>
+              <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                <h4 className="font-bold text-[#0B1F3A]">Qualité de l'image</h4>
+                <div className="flex items-center gap-3">
+                  {onDetailQualite && (
+                    <button type="button" onClick={onDetailQualite}
+                      className="text-xs font-bold text-[#00838F] hover:underline cursor-pointer">
+                      Voir le détail du calcul
+                    </button>
+                  )}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${QUALITE[q.niveau].cls}`}>
+                    {q.score}/100 · {QUALITE[q.niveau].label}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-3 bg-[#F4F6F8] rounded-2xl p-4">
+                <BarreQualite titre="Netteté" score={q.scores.nettete} detail={`indice ${q.mesures.nettete}`} />
+                <BarreQualite titre="Luminosité" score={q.scores.luminosite} detail={`${q.mesures.luminosite}/255`} />
+                <BarreQualite titre="Contraste" score={q.scores.contraste} detail={`${q.mesures.contraste}`} />
+                <BarreQualite titre="Résolution" score={q.scores.resolution} detail={`${q.mesures.largeur}×${q.mesures.hauteur}`} />
+              </div>
+              <p className="text-xs text-[#4A5568] mt-3">{q.fiabilite}</p>
+              {q.conseils.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {q.conseils.map((c, i) => (
+                    <li key={i} className="text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2">{c}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {r.duration_seconds > 0 && (
             <p className="text-xs text-[#4A5568]">Durée analysée : {r.duration_seconds} s</p>

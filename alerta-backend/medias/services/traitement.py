@@ -8,7 +8,7 @@ from recognition import services as reco
 
 from ..models import Media
 from .mouvement import detecter_mouvements
-
+from .qualite import ajouter_taille_visages, evaluer_qualite
 logger = logging.getLogger(__name__)
 
 # Une seule analyse à la fois : évite de saturer le processeur
@@ -80,24 +80,35 @@ def _traiter(media_id):
 
     media.statut = Media.Statut.EN_COURS
     media.save(update_fields=["statut"])
+
+    qualite = None
     try:
+        # La qualité ne doit jamais bloquer l'analyse des visages
+        try:
+            qualite = evaluer_qualite(media.fichier.path, media.type)
+        except Exception:
+            logger.exception("Évaluation de la qualité impossible pour le média %s", media_id)
+
         if media.type == Media.Type.PHOTO:
-            media.resultats = _analyser_photo(media)
+            resultat = _analyser_photo(media)
         else:
-            media.resultats = _analyser_video(media)
+            resultat = _analyser_video(media)
+
+        if qualite:
+            ajouter_taille_visages(qualite, resultat)
+            resultat["qualite"] = qualite
+        media.resultats = resultat
         media.statut = Media.Statut.TERMINE
         media.message_erreur = ""
     except Exception as erreur:       # inclut ZoneInactive, PhotoRejected, FaceEngineUnavailable
         logger.exception("Échec du traitement du média %s", media_id)
         media.statut = Media.Statut.ERREUR
         media.message_erreur = str(erreur)
+        if qualite:                    # on garde au moins la qualité : « photo floue, aucun visage »
+            media.resultats = {"qualite": qualite}
 
     media.date_traitement = timezone.now()
     media.save(update_fields=["resultats", "statut", "message_erreur", "date_traitement"])
-
-    if media.statut == Media.Statut.TERMINE:
-        _creer_evenement_depuis_media(media)
-
     close_old_connections()
 
 def _creer_evenement_depuis_media(media):
