@@ -1,7 +1,7 @@
 import { useContext, useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import VoiceAlarmControl from './VoiceAlarmControl';
 
 export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
   const { user, logout } = useContext(AuthContext);
@@ -40,7 +40,7 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
         {/* ── GAUCHE : Logo Alerta ── */}
         <div
           className="flex items-center gap-3 cursor-pointer select-none"
-          onClick={() => setActiveTab && setActiveTab('accueil')}
+          onClick={() => navigate('/dashboard')}
         >
           <svg width="32" height="32" viewBox="0 0 64 64" className="flex-shrink-0">
             <rect width="64" height="64" rx="16" fill="#0B1F3A" />
@@ -55,45 +55,37 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           </span>
         </div>
 
-        {/* ── CENTRE : Navigation selon le rôle ── */}
+        {/* ── CENTRE : Navigation vers chaque module / page dédiée ── */}
         <div className="flex items-center gap-2">
-          {/* Bouton Accueil pour tout le monde */}
+          {/* Bouton Accueil pour tout le monde (Page Générale) */}
           <button
-            onClick={() => {
-              if (location.pathname !== '/dashboard') navigate('/dashboard');
-              if (setActiveTab) setActiveTab('accueil');
-            }}
+            onClick={() => navigate('/dashboard')}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
-              location.pathname === '/dashboard' && activeTab === 'accueil'
+              location.pathname === '/dashboard' || location.pathname === '/'
                 ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
             Accueil
           </button>
+
           {/* Module 1 : Zones & Visages */}
           <button
-            onClick={() => {
-              if (location.pathname !== '/dashboard') navigate('/dashboard');
-              if (setActiveTab) setActiveTab('zones');
-            }}
+            onClick={() => navigate('/zones')}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
-              activeTab === 'zones'
+              location.pathname === '/zones'
                 ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
-            Zones & Visages
+            Zones &amp; Visages
           </button>
 
           {/* Module 2 : Médias */}
           <button
-            onClick={() => {
-              if (location.pathname !== '/dashboard') navigate('/dashboard');
-              if (setActiveTab) setActiveTab('medias');
-            }}
+            onClick={() => navigate('/medias')}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
-              activeTab === 'medias'
+              location.pathname === '/medias'
                 ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
@@ -110,30 +102,27 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             <span>Événements</span>
           </button>
-          {/* Planificateur de caméras (Phase 1) */}
-          <Link
-            to="/planner"
+
+          {/* Planificateur de caméras */}
+          <button
+            onClick={() => navigate('/planner')}
             className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold ${
-              activeTab === 'planner'
+              location.pathname === '/planner'
                 ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
             Planificateur
-          </Link>
+          </button>
 
           {/* Bouton Dashboard Admin UNIQUEMENT visible par les administrateurs */}
           {isAdmin && (
             <button
-              onClick={() => {
-                if (location.pathname !== '/dashboard') navigate('/dashboard');
-                if (setActiveTab) setActiveTab('admin_dashboard');
-              }}
+              onClick={() => navigate('/admin')}
               className={`px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer text-sm font-semibold flex items-center gap-2 ${
-                location.pathname === '/dashboard' && activeTab === 'admin_dashboard'
+                location.pathname === '/admin'
                   ? 'bg-[#00C2CB] text-[#0B1F3A] shadow-xs'
                   : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
               }`}
@@ -146,84 +135,89 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
           )}
         </div>
 
-        {/* ── DROITE : Profil utilisateur & Dropdown ── */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen((p) => !p)}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer group"
-          >
-            <span
-              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-[#0B1F3A] flex-shrink-0 shadow-xs"
-              style={{ background: '#00C2CB' }}
-            >
-              {getInitials()}
-            </span>
-            <div className="text-left hidden sm:block">
-              <span className="text-sm font-semibold text-white block leading-tight">{displayName}</span>
-              <span className="text-[11px] text-[#00C2CB] font-medium block">
-                {isAdmin ? '🛡️ Admin' : '👤 Utilisateur'}
-              </span>
-            </div>
-            <svg
-              className={`w-3.5 h-3.5 text-[#B8C7D9] group-hover:text-white transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+        {/* ── DROITE : Contrôle Vocal Alarme (Module 4) + Profil utilisateur & Dropdown ── */}
+        <div className="flex items-center gap-3">
+          {/* Module 4 : Bouton Micro & Statut Alarme */}
+          <VoiceAlarmControl />
 
-          {/* Menu déroulant */}
-          {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#D8DEE4] overflow-hidden z-50">
-              {/* En-tête du menu */}
-              <div className="px-5 py-3.5 border-b border-[#E7EBEF] bg-[#F4F6F8]">
-                <p className="text-sm font-bold text-[#0B1F3A] truncate">{displayName}</p>
-                <p className="text-xs text-[#4A5568] truncate mt-0.5">{user?.email}</p>
-                <span className={`inline-block mt-2 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                  isAdmin ? 'bg-[#0B1F3A] text-[#00C2CB]' : 'bg-[#E4F8F9] text-[#00838F]'
-                }`}>
-                  {isAdmin ? '🛡️ Administrateur' : '👤 Utilisateur'}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((p) => !p)}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer group"
+            >
+              <span
+                className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-[#0B1F3A] flex-shrink-0 shadow-xs"
+                style={{ background: '#00C2CB' }}
+              >
+                {getInitials()}
+              </span>
+              <div className="text-left hidden sm:block">
+                <span className="text-sm font-semibold text-white block leading-tight">{displayName}</span>
+                <span className="text-[11px] text-[#00C2CB] font-medium block">
+                  {isAdmin ? '🛡️ Admin' : '👤 Utilisateur'}
                 </span>
               </div>
+              <svg
+                className={`w-3.5 h-3.5 text-[#B8C7D9] group-hover:text-white transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-              {/* Raccourci Dashboard Admin si l'utilisateur est admin */}
-              {isAdmin && (
+            {/* Menu déroulant */}
+            {dropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#D8DEE4] overflow-hidden z-50">
+                {/* En-tête du menu */}
+                <div className="px-5 py-3.5 border-b border-[#E7EBEF] bg-[#F4F6F8]">
+                  <p className="text-sm font-bold text-[#0B1F3A] truncate">{displayName}</p>
+                  <p className="text-xs text-[#4A5568] truncate mt-0.5">{user?.email}</p>
+                  <span className={`inline-block mt-2 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+                    isAdmin ? 'bg-[#0B1F3A] text-[#00C2CB]' : 'bg-[#E4F8F9] text-[#00838F]'
+                  }`}>
+                    {isAdmin ? '🛡️ Administrateur' : '👤 Utilisateur'}
+                  </span>
+                </div>
+
+                {/* Raccourci Dashboard Admin si l'utilisateur est admin */}
+                {isAdmin && (
+                  <button
+                    onClick={() => { setDropdownOpen(false); navigate('/admin'); }}
+                    className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#0B1F3A] hover:bg-[#E4F8F9] hover:text-[#00838F] transition-colors cursor-pointer text-left border-b border-[#E7EBEF]"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0 text-[#00838F]" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                    </svg>
+                    Dashboard Administrateur
+                  </button>
+                )}
+
+                {/* Bouton Profil & Paramètres */}
                 <button
-                  onClick={() => { setDropdownOpen(false); setActiveTab && setActiveTab('admin_dashboard'); }}
-                  className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#0B1F3A] hover:bg-[#E4F8F9] hover:text-[#00838F] transition-colors cursor-pointer text-left border-b border-[#E7EBEF]"
+                  onClick={() => { setDropdownOpen(false); navigate('/settings'); }}
+                  className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#0B1F3A] hover:bg-[#E4F8F9] hover:text-[#00838F] transition-colors cursor-pointer text-left"
                 >
                   <svg className="w-4 h-4 flex-shrink-0 text-[#00838F]" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                   </svg>
-                  Dashboard Administrateur
+                  Mon profil &amp; Sécurité
                 </button>
-              )}
 
-              {/* Bouton Profil & Paramètres */}
-              <button
-                onClick={() => { setDropdownOpen(false); setActiveTab && setActiveTab('parametres'); }}
-                className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#0B1F3A] hover:bg-[#E4F8F9] hover:text-[#00838F] transition-colors cursor-pointer text-left"
-              >
-                <svg className="w-4 h-4 flex-shrink-0 text-[#00838F]" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                </svg>
-                Mon profil &amp; Sécurité
-              </button>
+                <div className="border-t border-[#E7EBEF]" />
 
-              <div className="border-t border-[#E7EBEF]" />
-
-              {/* Déconnexion avec vérification */}
-              <button
-                onClick={() => { setDropdownOpen(false); setShowLogoutModal(true); }}
-                className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#E63946] hover:bg-red-50 transition-colors cursor-pointer text-left"
-              >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H9" />
-                </svg>
-                Se déconnecter
-              </button>
-            </div>
-          )}
+                {/* Déconnexion avec vérification */}
+                <button
+                  onClick={() => { setDropdownOpen(false); setShowLogoutModal(true); }}
+                  className="w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-[#E63946] hover:bg-red-50 transition-colors cursor-pointer text-left"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H9" />
+                  </svg>
+                  Se déconnecter
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

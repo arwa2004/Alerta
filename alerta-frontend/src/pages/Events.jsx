@@ -18,10 +18,7 @@ function Tuile({ titre, valeur, couleur = 'text-[#0B1F3A]' }) {
 export default function Events() {
   const { user } = useContext(AuthContext);
 
-  // Redirection des administrateurs vers leur dashboard dédié
-  if (user?.role === 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // Accès ouvert aux utilisateurs et administrateurs
 
   const [events, setEvents] = useState([]);
   const [stats, setStats] = useState(null);

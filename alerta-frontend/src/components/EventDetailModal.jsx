@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import eventsApi from '../api/eventsApi';
+import VoiceAlarmControl from './VoiceAlarmControl';
 
 export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   if (!event) return null;
@@ -27,6 +28,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   );
   const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isAlarmSilenced, setIsAlarmSilenced] = useState(false);
 
   // Synchronisation dynamique si les props de l'événement changent
   useEffect(() => {
@@ -118,7 +120,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
     try {
       const updated = await eventsApi.genererImage(event.id);
       if (updated.ia_success === false) {
-        // En cas de rate-limit (402), avertir l'utilisateur sans écraser l'image
         setErrorMsg(updated.ia_message || "Limite temporaire atteinte. Votre image actuelle est conservée.");
         setCooldown(8);
         return;
@@ -131,7 +132,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
         setCurrentImageUrl(url + '?t=' + Date.now());
       }
       setCurrentImageSource(updated.image_source || 'ia_ouverte');
-      setCooldown(5); // Délai court de sécurité de 15s
+      setCooldown(5);
       if (onEventUpdated) onEventUpdated(updated);
     } catch (err) {
       console.error('Erreur génération image', err);
@@ -149,8 +150,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   });
 
   const imageUrl = currentImageUrl;
-  const isHfImage = currentImageSource === 'hf';
-  const isOpenAiImage = currentImageSource === 'ia_ouverte';
   const photoCaptureeUrl = event.photo_capturee
     ? (event.photo_capturee.startsWith('http') ? event.photo_capturee : `http://127.0.0.1:8000${event.photo_capturee}`)
     : null;
@@ -247,7 +246,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
               ) : (
                 <div className="text-center p-6 text-slate-500">
                   <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <p className="text-sm">Image illustrative en cours de génération</p>
                 </div>
@@ -261,14 +260,14 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           )}
 
-          {/* SECTION ANALYSE IA GEMINI (DÉCLENCHÉE AVEC LE BOUTON) */}
+          {/* SECTION ANALYSE IA GEMINI */}
           <div className="p-5 rounded-xl bg-gradient-to-r from-slate-900 to-[#0e1a38] border border-cyan-500/30 shadow-lg">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-xs font-bold text-cyan-400 uppercase tracking-wider">
                 <svg className="w-4 h-4 text-[#00C2CB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Analyse & Description de Scène
+                Analyse &amp; Description de Scène
               </div>
 
               {hasGeminiAnalyzed && getDescriptionBadge()}
@@ -377,12 +376,12 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Jauge du Score de Criticité - Design Moderne */}
+          {/* Jauge du Score de Criticité */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900/90 to-slate-950 border border-slate-800/80 shadow-md">
             <div className="flex items-center justify-between mb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span className="text-xs font-semibold text-slate-300 tracking-wide">Niveau de Risque & Gravité</span>
+                <span className="text-xs font-semibold text-slate-300 tracking-wide">Niveau de Risque &amp; Gravité</span>
               </div>
               <span className={`text-xs font-extrabold px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/50 ${critInfo.color}`}>
                 {critInfo.label} • {Math.round(event.score_criticite * 100)}%
@@ -396,7 +395,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Métadonnées & Paramètres - 2 Cartes sobres et élégantes */}
+          {/* Métadonnées & Paramètres */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Zone */}
             <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/70 hover:border-slate-700/80 transition shadow-sm flex flex-col justify-between">
@@ -417,7 +416,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                 <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Date & Heure
+                Date &amp; Heure
               </span>
               <span className="font-bold text-sm text-slate-100">
                 {formattedDate}
@@ -425,16 +424,39 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* Déclenchement Module 4 */}
-          {event.alerte_declenchee && (
-            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
-              <span className="p-2 rounded-lg bg-rose-500/20 text-rose-400 font-bold">M4</span>
+          {/* ── SECTION DÉCLENCHEMENT MODULE 4 (VOIX & ALARME) — MÊME COMPOSANT QUE DANS LE NAVBAR ── */}
+          <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+            <div className="flex items-center gap-3">
+              <span className={`p-2 rounded-xl font-bold text-sm ${
+                event.alerte_declenchee && !isAlarmSilenced
+                  ? 'bg-rose-500/20 text-rose-400'
+                  : 'bg-cyan-500/20 text-cyan-400'
+              }`}>
+                M4
+              </span>
               <div>
-                <p className="font-semibold text-rose-200">Alerte synchronisée avec le Module 4 (Voix & Alarme)</p>
-                <p className="text-slate-400">Diffusion d'un avertissement prioritaire.</p>
+                <p className="font-bold text-slate-100">Alerte synchronisée avec le Module 4 (Voix &amp; Alarme)</p>
+                <p className="text-slate-400 text-[11px]">
+                  {event.alerte_declenchee && !isAlarmSilenced
+                    ? "Sirène active et diffusion d'un avertissement prioritaire."
+                    : "Contrôle vocal Whisper et gestion en temps réel de l'alarme."}
+                </p>
+
               </div>
             </div>
-          )}
+
+            {/* Même composant exact que dans la Navbar */}
+            <div className="flex-shrink-0">
+              <VoiceAlarmControl
+                showTextAlways={true}
+                onAlarmChange={(status) => {
+                  if (status && !status.est_declenchee) {
+                    setIsAlarmSilenced(true);
+                  }
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Pied de page */}

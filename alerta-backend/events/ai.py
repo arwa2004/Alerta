@@ -19,12 +19,14 @@ import os
 
 # ─── Prompt Vision (ne contient PAS le type d'événement : évite la confirmation hallucinée) ──
 _VISION_PROMPT = (
-    "Tu es analyste de vidéosurveillance rigoureux pour le système de sécurité Alerta. "
-    "Décris en français en 2 à 3 phrases EXACTEMENT et UNIQUEMENT ce qui est directement visible sur cette image : "
-    "personnes (vêtements, posture, accessoires), objets, éclairage, contexte et couleurs observables. "
-    "Règle absolue : n'invente absolument rien qui ne soit pas visible à l'image. "
-    "Si l'image est floue, vide, unie ou ne montre personne, indique-le clairement. "
-    "Zone surveillée : {zone}."
+    "Tu es l'analyste de vidéosurveillance IA du système de sécurité Alerta. "
+    "Cette capture provient de la caméra installée dans la zone « {zone} ». "
+    "Règle impérative : cite obligatoirement la zone « {zone} » et décris avec précision et fidélité "
+    "ce qui est directement visible sur cette image : "
+    "personnes présentes (apparence physique, vêtements et motifs/couleurs, accessoires comme lunettes ou bandeau, posture, expression/attitude), "
+    "objets notables, éclairage et environnement visible. "
+    "N'invente rien qui ne soit pas observable. "
+    "Rédige une description professionnelle et détaillée en français en 2 à 3 phrases."
 )
 
 
@@ -48,7 +50,7 @@ def decrire_photo_gemini(ev):
     mime = mimetypes.guess_type(ev.photo_capturee.name)[0] or "image/jpeg"
 
     # Tentative avec le modèle configuré, puis fallback modèles actifs
-    models_to_try = [gemini_model, 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
+    models_to_try = [gemini_model, 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash']
     # Déduplication en préservant l'ordre
     seen = set()
     models_candidates = [m for m in models_to_try if not (m in seen or seen.add(m))]
@@ -125,16 +127,27 @@ class AlertaAIService:
                 b64_img = base64.b64encode(image_bytes).decode('utf-8')
                 mime_type = "image/png" if getattr(photo_capturee, 'name', '').lower().endswith('.png') else "image/jpeg"
 
+                type_labels = {
+                    'inconnu': 'individu non répertorié',
+                    'visage_inconnu': 'individu non répertorié',
+                    'visage_connu': f'visage identifié ({personne_nom})' if personne_nom else 'visage autorisé',
+                    'mouvement': 'mouvement capté',
+                }
+                type_label = type_labels.get(event_type, 'événement de sécurité')
+
                 vision_prompt = (
-                    f"Tu es l'agent de vision IA du système de sécurité Alerta. "
-                    f"Analyse cette capture de vidéosurveillance issue de la zone « {zone_nom} » (enregistrée à {heure_str}). "
-                    f"Règle absolue : décris UNIQUEMENT et fidèlement ce qui est visible sur cette image "
-                    f"(présence d'individus, posture, allure, tenue ou accessoires visibles, luminosité et contexte immédiat). "
-                    f"N'invente rien qui ne soit pas directement observable. "
-                    f"Formule une description professionnelle et sobre en français (2 à 3 phrases maximum)."
+                    f"Tu es l'analyste de vidéosurveillance IA du système de sécurité Alerta. "
+                    f"Cette capture provient de la caméra installée dans la zone « {zone_nom} » (enregistrée à {heure_str}). "
+                    f"Contexte système : {type_label}. "
+                    f"Règle impérative : cite explicitement la zone « {zone_nom} » et décris avec précision et fidélité "
+                    f"ce qui est directement visible sur cette image : "
+                    f"personnes présentes (apparence physique, vêtements avec leurs couleurs et motifs, accessoires visibles tels que lunettes ou bandeau, posture, attitude), "
+                    f"ainsi que l'éclairage et l'environnement visible de la pièce. "
+                    f"N'invente rien qui ne soit pas observable. "
+                    f"Rédige une description professionnelle, claire et fidèle en français en 2 à 3 phrases."
                 )
 
-                for model_candidate in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']:
+                for model_candidate in ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash']:
                     url_gen = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={gemini_key}"
                     payload_gen = {
                         "contents": [{
@@ -178,7 +191,7 @@ class AlertaAIService:
             )
 
             try:
-                for model_candidate in ['gemini-2.5-flash', 'gemini-1.5-flash']:
+                for model_candidate in ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest']:
                     url_gen = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={gemini_key}"
                     payload_gen = {
                         "contents": [{"parts": [{"text": text_prompt}]}],
@@ -252,13 +265,13 @@ class AlertaAIService:
         # C'est cette description qui guide le modèle text-to-image.
         description_ia = evenement.description or ''
 
-        # Nettoyage : garder 150 car. pertinents, convertir en ASCII pour l'API
-        desc_clean = description_ia[:150].encode('ascii', 'ignore').decode('ascii').strip()
+        # Nettoyage : garder les détails visuels pertinents, convertir en ASCII pour l'API
+        desc_clean = description_ia[:280].encode('ascii', 'ignore').decode('ascii').strip()
 
         # Prompt unique utilisé par HF et Pollinations
         prompt_image = (
-            f"CCTV security camera surveillance footage still frame, "
-            f"location: {zone_nom}, nighttime, low light, grainy, realistic, "
+            f"Security camera surveillance photo, "
+            f"location: {zone_nom}, realistic, "
             f"{desc_clean}"
         )
         prompt_image_safe = prompt_image.encode('ascii', 'ignore').decode('ascii')

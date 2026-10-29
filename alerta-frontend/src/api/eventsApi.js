@@ -96,6 +96,41 @@ export const eventsApi = {
     });
     return res.data;
   },
+
+  // Module 4 - Voix & Alarme (Whisper Hugging Face)
+  getAlarmeStatus: async () => {
+    const res = await axios.get(`${BASE_URL}alarme/`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  setAlarmeAction: async (action) => {
+    const res = await axios.post(
+      `${BASE_URL}alarme/`,
+      { action },
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  envoyerCommandeVocale: async (payload) => {
+    const headers = getAuthHeaders();
+    let data;
+    if (payload instanceof FormData) {
+      data = payload;
+    } else if (typeof payload === 'string') {
+      data = { texte: payload };
+    } else {
+      const fd = new FormData();
+      fd.append('audio', payload, 'commande.webm');
+      data = fd;
+    }
+    const res = await axios.post(`${BASE_URL}alarme/commande-vocale/`, data, {
+      headers,
+    });
+    return res.data;
+  },
 };
 
 export default eventsApi;

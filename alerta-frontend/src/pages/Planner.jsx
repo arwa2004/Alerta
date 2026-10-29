@@ -9,6 +9,7 @@ import {
 // --- PHASE 2 IMPORTS ---
 import CctvOptimizationPanel from '../components/CctvOptimizationPanel';
 
+
 const MAX_MB = 20; // miroir de PLANNER_MAX_UPLOAD_MB ; le serveur reste l'autorité
 const CURRENCIES = ['TND', 'EUR', 'USD'];
 const inputCls =
@@ -253,6 +254,7 @@ export default function Planner() {
           )}
         </section>
       </main>
+      
     </div>
   );
 }

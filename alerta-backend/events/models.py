@@ -1,4 +1,4 @@
-﻿from django.db import models
+from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
@@ -177,3 +177,51 @@ class Evenement(models.Model):
     @property
     def zone_affichee(self):
         return self.zone.nom if self.zone else self.zone_nom_fallback
+
+
+
+class AlarmeConfig(models.Model):
+    """
+    Système d'alarme et contrôle vocal (Module 4 - Voix & Alarme).
+    Gère l'état armé/désarmé, le déclenchement de la sirène et l'historique des commandes vocales Whisper.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='alarme_config'
+    )
+    est_active = models.BooleanField(
+        default=True,
+        verbose_name="Alarme armée (veille active)"
+    )
+    est_declenchee = models.BooleanField(
+        default=False,
+        verbose_name="Sirène en cours de déclenchement"
+    )
+    derniere_commande = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name="Dernière commande vocale transcrite (Whisper)"
+    )
+    derniere_action = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name="Dernière action effectuée"
+    )
+    source_transcription = models.CharField(
+        max_length=50,
+        blank=True,
+        default='whisper_huggingface',
+        verbose_name="Moteur IA de transcription"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuration Alarme"
+        verbose_name_plural = "Configurations Alarmes"
+
+    def __str__(self):
+        etat = "DÉCLENCHÉE" if self.est_declenchee else ("ARMÉE" if self.est_active else "DÉSARMÉE")
+        return f"Alarme {self.user.email} [{etat}]"

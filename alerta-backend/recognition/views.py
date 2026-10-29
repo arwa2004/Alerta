@@ -10,9 +10,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import engine, quality, services
-from .models import Face, KnownPerson, Zone
+from .models import Face, KnownPerson, SurveillanceVideo, Zone
 from .serializers import (MIN_PHOTOS, AddFacesSerializer, FaceSerializer,
-                          KnownPersonCreateSerializer, KnownPersonSerializer, ZoneSerializer)
+                          KnownPersonCreateSerializer, KnownPersonSerializer,
+                          SurveillanceVideoSerializer, ZoneSerializer)
 
 
 class ZoneViewSet(viewsets.ModelViewSet):
@@ -50,17 +51,43 @@ class ZoneViewSet(viewsets.ModelViewSet):
         try:
             if is_video:
                 import os
-                import tempfile
+                import uuid
                 ext = os.path.splitext(filename)[1] or '.mp4'
-                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-                    for chunk in upload.chunks():
-                        tmp.write(chunk)
-                    tmp_path = tmp.name
-                try:
-                    report = services.identify_video_faces(zone, tmp_path)
-                finally:
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
+
+                # 1. Sauvegarde permanente de la vidéo dans media/videos/
+                video_obj = SurveillanceVideo.objects.create(
+                    zone=zone,
+                    uploaded_by=request.user,
+                    video_file=upload,
+                    original_filename=upload.name or f"video_{uuid.uuid4().hex[:8]}{ext}",
+                )
+
+                # 2. Analyse IA sur le fichier vidéo stocké
+                report = services.identify_video_faces(zone, video_obj.video_file.path)
+
+                # 3. Sauvegarde des métadonnées (personnes connues et inconnues détectées)
+                video_obj.duration_seconds = report.get('duration_seconds', 0.0)
+                video_obj.alert_triggered = report.get('alert_triggered', False)
+                video_obj.known_persons_names = report.get('known_persons', [])
+                video_obj.known_snapshots = report.get('known_snapshots', [])
+                video_obj.unknown_count = len(report.get('unknown_snapshots', []))
+                video_obj.unknown_snapshots = report.get('unknown_snapshots', [])
+                video_obj.timeline = report.get('timeline', [])
+                video_obj.save()
+
+                if video_obj.known_persons_names:
+                    known_objs = KnownPerson.objects.filter(
+                        owner=request.user,
+                        full_name__in=video_obj.known_persons_names
+                    )
+                    video_obj.known_persons.set(known_objs)
+
+                # 4. Enrichissement du rapport retourné au client
+                report['video_id'] = video_obj.id
+                report['video_url'] = request.build_absolute_uri(video_obj.video_file.url)
+                report['saved'] = True
+                report['saved_at'] = video_obj.created_at.isoformat()
+
                 return Response(report)
             else:
                 data = upload.read()
@@ -145,3 +172,51 @@ class FaceImageView(APIView):
         face = get_object_or_404(Face, pk=pk, person__owner=request.user)
         content_type = mimetypes.guess_type(face.image.name)[0] or 'application/octet-stream'
         return FileResponse(face.image.open('rb'), content_type=content_type)
+
+
+class SurveillanceVideoViewSet(viewsets.ModelViewSet):
+    """Accès aux vidéos de surveillance enregistrées dans media/ avec leurs personnes identifiées."""
+    serializer_class = SurveillanceVideoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        qs = (SurveillanceVideo.objects.filter(uploaded_by=self.request.user)
+              .select_related('zone')
+              .prefetch_related('known_persons'))
+        zone_id = self.request.query_params.get('zone')
+        if zone_id and zone_id.isdigit():
+            qs = qs.filter(zone_id=int(zone_id))
+        alert = self.request.query_params.get('alert')
+        if alert is not None:
+            if alert.lower() in ('true', '1'):
+                qs = qs.filter(alert_triggered=True)
+            elif alert.lower() in ('false', '0'):
+                qs = qs.filter(alert_triggered=False)
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='search-unknown')
+    def search_unknown(self, request):
+        """Recherche les apparitions d'un individu inconnu dans toutes les vidéos de toutes les zones."""
+        video_id = request.data.get('video_id')
+        unknown_index = request.data.get('unknown_index')
+        thumbnail = request.data.get('thumbnail')
+        raw_th = request.data.get('threshold')
+        threshold = float(raw_th) if raw_th is not None else 0.50
+
+        try:
+            results = services.search_unknown_across_videos(
+                user=request.user,
+                video_id=int(video_id) if video_id is not None else None,
+                unknown_index=int(unknown_index) if unknown_index is not None else None,
+                thumbnail=thumbnail,
+                threshold=threshold,
+            )
+            for m in results.get('matches', []):
+                if m.get('video_url'):
+                    m['video_url'] = request.build_absolute_uri(m['video_url'])
+            return Response(results)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'detail': f"Erreur lors de la recherche : {exc}"}, status=status.HTTP_400_BAD_REQUEST)

@@ -496,7 +496,7 @@ export default function UserDashboard({ initialTab = 'evenements' }) {
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onEventUpdated={(updated) => {
-            setSelectedEvent(updated);
+            if (updated) setSelectedEvent(updated);
             fetchStats();
           }}
         />

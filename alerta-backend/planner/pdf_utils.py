@@ -2,8 +2,14 @@
 import hashlib
 from dataclasses import dataclass
 
-import pymupdf
 from django.conf import settings
+
+try:
+    import pymupdf
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    pymupdf = None
+    PYMUPDF_AVAILABLE = False
 
 
 class PDFValidationError(Exception):
@@ -24,6 +30,9 @@ def read_and_validate_pdf(uploaded_file):
     signature %PDF-, lisibilité par PyMuPDF, non chiffré, nombre de pages.
     Retourne (bytes, sha256, page_count).
     """
+    if not PYMUPDF_AVAILABLE:
+        raise PDFValidationError("Module PyMuPDF non installé — fonctionnalité PDF indisponible.")
+
     name = (getattr(uploaded_file, 'name', '') or '').lower()
     if not name.endswith('.pdf'):
         raise PDFValidationError("Le fichier doit avoir l'extension .pdf.")
@@ -68,6 +77,9 @@ def render_page_to_png(pdf_bytes, page_number):
     La résolution est réduite automatiquement si l'image dépasserait
     PLANNER_MAX_RENDER_PIXELS sur son plus grand côté (protection mémoire).
     """
+    if not PYMUPDF_AVAILABLE:
+        raise PDFValidationError("Module PyMuPDF non installé — fonctionnalité PDF indisponible.")
+
     dpi = settings.PLANNER_RENDER_DPI
     try:
         doc = pymupdf.open(stream=pdf_bytes, filetype='pdf')

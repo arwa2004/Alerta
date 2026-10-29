@@ -18,3 +18,10 @@ export const listOptimizations = (projectId) =>
 
 export const getOptimization = (optimizationId) =>
   axiosClient.get(`optimizations/${optimizationId}/`, opts()).then((r) => r.data);
+
+// ⬇️ AJOUTE CES DEUX NOUVELLES FONCTIONS À LA FIN ⬇️
+export const fetchSecurityAudit = (floorPlanId) =>
+  axiosClient.post(`floor-plans/${floorPlanId}/security-audit/`, {}, opts()).then((r) => r.data);
+
+export const simulateDigitalTwin = (payload) =>
+  axiosClient.post(`digital-twin/simulate/`, payload, opts()).then((r) => r.data);

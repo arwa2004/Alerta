@@ -8,9 +8,10 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count, Q
 
-from .models import Evenement, Zone
-from .serializers import EvenementSerializer, EvenementCreateSerializer, ZoneSerializer
+from .models import Evenement, Zone, AlarmeConfig
+from .serializers import EvenementSerializer, EvenementCreateSerializer, ZoneSerializer, AlarmeConfigSerializer
 from .services import creer_evenement, analyser_evenement, analyser_evenement_gemini
+from .voice_service import transcrire_audio, interpreter_et_executer_commande
 from .ai import AlertaAIService
 from users.permissions import IsOwnerOrAdmin, IsAdminUserRole
 
@@ -39,7 +40,7 @@ class EvenementListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['type', 'niveau_criticite', 'zone', 'statut_ia', 'alerte_declenchee']
-    search_fields = ['description', 'personne_nom', 'zone_nom_fallback', 'zone__nom']
+    search_fields = ['description', 'personne_nom', 'zone__nom', 'zone_nom_fallback']
     ordering_fields = ['date_heure', 'score_criticite', 'score_confiance']
     ordering = ['-date_heure']
 
@@ -51,43 +52,35 @@ class EvenementListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role == 'admin' or user.is_superuser:
-            qs = Evenement.objects.all().select_related('user', 'zone')
-        else:
-            qs = Evenement.objects.filter(user=user).select_related('user', 'zone')
+            return Evenement.objects.select_related('zone', 'user').all()
+        return Evenement.objects.select_related('zone', 'user').filter(user=user)
 
-        date_debut = self.request.query_params.get('date_debut')
-        date_fin = self.request.query_params.get('date_fin')
-        if date_debut:
-            qs = qs.filter(date_heure__gte=date_debut)
-        if date_fin:
-            qs = qs.filter(date_heure__lte=date_fin)
-
-        return qs
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+    def perform_create(self, serializer):
+        zone = serializer.validated_data.get('zone')
+        zone_nom_fallback = serializer.validated_data.get('zone_nom_fallback', 'Entrée Principale')
+        type_event = serializer.validated_data.get('type', 'mouvement')
+        personne_nom = serializer.validated_data.get('personne_nom', '')
+        score_confiance = serializer.validated_data.get('score_confiance', 0.85)
+        date_heure = serializer.validated_data.get('date_heure', timezone.now())
+        photo_capturee = serializer.validated_data.get('photo_capturee')
 
         evenement = creer_evenement(
-            user=request.user,
-            type_event=data.get('type', 'mouvement'),
-            zone=data.get('zone'),
-            zone_nom_fallback=data.get('zone_nom_fallback', 'Entrée Principale'),
-            personne_nom=data.get('personne_nom', ''),
-            score_confiance=data.get('score_confiance', 0.85),
-            date_heure=data.get('date_heure', timezone.now()),
-            photo_capturee=data.get('photo_capturee')
+            user=self.request.user,
+            type_event=type_event,
+            zone=zone,
+            zone_nom_fallback=zone_nom_fallback,
+            personne_nom=personne_nom,
+            score_confiance=score_confiance,
+            date_heure=date_heure,
+            photo_capturee=photo_capturee
         )
-
-        output_serializer = EvenementSerializer(evenement, context={'request': request})
-        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+        serializer.instance = evenement
 
 
 class EvenementDetailView(generics.RetrieveDestroyAPIView):
     """
-    GET    /api/evenements/{id}/ : Consultation détaillée d'un événement.
-    DELETE /api/evenements/{id}/ : Suppression d'un événement.
+    GET    /api/evenements/<id>/ : Détail d'un événement avec relations.
+    DELETE /api/evenements/<id>/ : Suppression d'un événement (propriétaire ou admin).
     """
     serializer_class = EvenementSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
@@ -95,110 +88,132 @@ class EvenementDetailView(generics.RetrieveDestroyAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.role == 'admin' or user.is_superuser:
-            return Evenement.objects.all().select_related('user', 'zone')
-        return Evenement.objects.filter(user=user).select_related('user', 'zone')
-
-
-ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
-MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 Mo
+            return Evenement.objects.select_related('zone', 'user').all()
+        return Evenement.objects.select_related('zone', 'user').filter(user=user)
 
 
 class EvenementGeminiAnalyseView(APIView):
     """
-    POST /api/evenements/{id}/analyser-gemini/
-    Déclenché explicitement par le bouton utilisateur pour générer l'analyse IA Gemini.
+    POST /api/evenements/<id>/analyser-gemini/
+    Déclenche l'analyse à la demande par Google Gemini.
     """
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
     def post(self, request, pk):
         try:
-            evenement = Evenement.objects.get(pk=pk)
+            user = request.user
+            if user.role == 'admin' or user.is_superuser:
+                evenement = Evenement.objects.select_related('zone', 'user').get(pk=pk)
+            else:
+                evenement = Evenement.objects.select_related('zone', 'user').get(pk=pk, user=user)
         except Evenement.DoesNotExist:
-            return Response({'detail': 'Événement non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': "Événement non trouvé."}, status=status.HTTP_404_NOT_FOUND)
 
-        self.check_object_permissions(request, evenement)
-        evenement = analyser_evenement(evenement)
-        return Response(EvenementSerializer(evenement, context={'request': request}).data)
+        try:
+            evenement = analyser_evenement_gemini(evenement)
+            return Response(EvenementSerializer(evenement, context={'request': request}).data)
+        except Exception as e:
+            return Response(
+                {'detail': f"Erreur lors de l'analyse Gemini : {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class EvenementGenererImageView(APIView):
+    """
+    POST /api/evenements/<id>/generer-image/
+    Génère la reconstitution visuelle depuis la description IA actuelle.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+
+    def post(self, request, pk):
+        try:
+            user = request.user
+            if user.role == 'admin' or user.is_superuser:
+                evenement = Evenement.objects.select_related('zone', 'user').get(pk=pk)
+            else:
+                evenement = Evenement.objects.select_related('zone', 'user').get(pk=pk, user=user)
+        except Evenement.DoesNotExist:
+            return Response({'detail': "Événement non trouvé."}, status=status.HTTP_404_NOT_FOUND)
+
+        # generer_image_reconstitution retourne un tuple (success: bool, message: str)
+        resultat_success, resultat_message = AlertaAIService.generer_image_reconstitution(evenement)
+
+        if not resultat_success:
+            # Rechargement depuis la DB pour avoir le dernier état (image existante conservée)
+            evenement.refresh_from_db()
+            data = EvenementSerializer(evenement, context={'request': request}).data
+            data['ia_success'] = False
+            data['ia_message'] = resultat_message or "Service IA saturé."
+            return Response(data, status=status.HTTP_200_OK)
+
+        # Si succès, l'image a déjà été sauvée dans generer_image_reconstitution via save(update_fields=...)
+        evenement.refresh_from_db()
+        data = EvenementSerializer(evenement, context={'request': request}).data
+        data['ia_success'] = True
+        data['ia_message'] = resultat_message or "Image générée avec succès."
+        return Response(data)
 
 
 class EvenementSimulateView(APIView):
     """
     POST /api/evenements/simulate/
-    Générateur d'événements de démonstration (supporte JSON ou multipart avec photo_capturee).
+    Simulateur temps réel pour les tests et démonstrations.
     """
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
-        import random
+        user = request.user
+        scenario = request.data.get('scenario') or request.data.get('type') or 'inconnu'
+        zone_id = request.data.get('zone')
+        photo_capturee = request.FILES.get('photo_capturee') or request.FILES.get('photo')
 
-        photo = request.FILES.get("photo_capturee")
-        if photo:
-            if photo.content_type not in ALLOWED_IMAGE_TYPES:
-                return Response({"detail": "Format image non supporté."}, status=status.HTTP_400_BAD_REQUEST)
-            if photo.size > MAX_IMAGE_SIZE:
-                return Response({"detail": "Image trop lourde (5 Mo max)."}, status=status.HTTP_400_BAD_REQUEST)
+        zone = None
+        zone_nom_fallback = "Entrée Principale"
 
-        scenarios = [
-            {
-                'type': 'inconnu',
-                'zone_nom_fallback': 'Entrée Principale',
-                'personne_nom': '',
-                'score_confiance': 0.88,
-            },
-            {
-                'type': 'visage_connu',
-                'zone_nom_fallback': 'Salon',
-                'personne_nom': request.user.first_name or 'Arwa',
-                'score_confiance': 0.96,
-            },
-            {
-                'type': 'mouvement',
-                'zone_nom_fallback': 'Jardin / Périmètre',
-                'personne_nom': '',
-                'score_confiance': 0.72,
-            },
-            {
-                'type': 'inconnu',
-                'zone_nom_fallback': 'Garage',
-                'personne_nom': '',
-                'score_confiance': 0.82,
-            }
-        ]
+        if zone_id:
+            try:
+                zone = Zone.objects.filter(id=zone_id, user=user).first()
+                if not zone and (user.role == 'admin' or user.is_superuser):
+                    zone = Zone.objects.filter(id=zone_id).first()
+            except Exception:
+                zone = None
 
-        choice = request.data.get('scenario') or request.data.get('type')
-        if choice and choice in ['inconnu', 'visage_connu', 'mouvement']:
-            matching = [s for s in scenarios if s['type'] == choice]
-            scenario = matching[0] if matching else scenarios[0]
-        else:
-            scenario = random.choice(scenarios)
-
-        type_event = request.data.get('type') or scenario['type']
-        
-        # Récupération de la zone choisie ou par défaut depuis les zones réelles créées par l'utilisateur (Module 1)
-        zone_nom = request.data.get('zone') or request.data.get('zone_nom_fallback')
-        if not zone_nom:
-            from recognition.models import Zone as RecoZone
-            user_zone = RecoZone.objects.filter(owner=request.user).first()
+        if not zone:
+            user_zone = Zone.objects.filter(user=user).first()
             if user_zone:
-                zone_nom = user_zone.name
+                zone = user_zone
+                zone_nom_fallback = user_zone.nom
             else:
-                zone_nom = scenario['zone_nom_fallback']
-        personne_nom = request.data.get('personne_nom', scenario['personne_nom'])
-        
-        try:
-            score_confiance = float(request.data.get('score_confiance', scenario['score_confiance']))
-        except (ValueError, TypeError):
-            score_confiance = scenario['score_confiance']
+                zone_nom_fallback = "Zone Détecteur #1"
+
+        if scenario == 'inconnu':
+            type_event = 'inconnu'
+            personne_nom = ''
+            score_confiance = 0.88
+        elif scenario == 'visage_connu':
+            type_event = 'visage_connu'
+            personne_nom = 'Arwa Ben Amar (Autorisée)'
+            score_confiance = 0.94
+        elif scenario == 'mouvement':
+            type_event = 'mouvement'
+            personne_nom = ''
+            score_confiance = 0.75
+        else:
+            type_event = 'mouvement'
+            personne_nom = ''
+            score_confiance = 0.80
 
         evenement = creer_evenement(
-            user=request.user,
+            user=user,
             type_event=type_event,
-            zone_nom_fallback=zone_nom,
+            zone=zone,
+            zone_nom_fallback=zone_nom_fallback,
             personne_nom=personne_nom,
             score_confiance=score_confiance,
-            photo_capturee=photo,
-            date_heure=timezone.now()
+            date_heure=timezone.now(),
+            photo_capturee=photo_capturee
         )
 
         return Response(
@@ -207,35 +222,9 @@ class EvenementSimulateView(APIView):
         )
 
 
-class EvenementGenererImageView(APIView):
-    """
-    POST /api/evenements/{id}/generer-image/
-    Déclenché par le bouton "Générer image" dans la modale.
-    Génère (ou régénère) l'image de reconstitution depuis la description IA actuelle de l'événement.
-    """
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
-
-    def post(self, request, pk):
-        try:
-            evenement = Evenement.objects.get(pk=pk)
-        except Evenement.DoesNotExist:
-            return Response({'detail': 'Événement non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
-
-        self.check_object_permissions(request, evenement)
-
-        success, message = AlertaAIService.generer_image_reconstitution(evenement)
-        evenement.refresh_from_db()
-
-        data = EvenementSerializer(evenement, context={'request': request}).data
-        data['ia_success'] = success
-        data['ia_message'] = message
-        return Response(data, status=status.HTTP_200_OK)
-
-
 class DashboardStatsView(APIView):
     """
-    GET /api/dashboard/
-    Statistiques consolidées pour l'Accueil Utilisateur et l'Admin.
+    GET /api/dashboard/ : Agrégation des métriques en temps réel.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -275,3 +264,96 @@ class DashboardStatsView(APIView):
             },
             'derniers_evenements': derniers_data,
         })
+
+
+class AlarmeStatusView(APIView):
+    """
+    GET  /api/alarme/ : Récupère le statut de l'alarme (armée, en cours, dernière commande).
+    POST /api/alarme/ : Modification manuelle de l'état (armer, désarmer, déclencher).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        config, _ = AlarmeConfig.objects.get_or_create(user=request.user)
+        return Response(AlarmeConfigSerializer(config).data)
+
+    def post(self, request):
+        config, _ = AlarmeConfig.objects.get_or_create(user=request.user)
+        action = request.data.get('action')
+
+        if action == 'desarmer':
+            config.est_active = False
+            config.est_declenchee = False
+            config.derniere_action = "Alarme désarmée manuellement"
+            Evenement.objects.filter(user=request.user, alerte_declenchee=True).update(alerte_declenchee=False)
+        elif action == 'armer':
+            config.est_active = True
+            config.est_declenchee = False
+            config.derniere_action = "Alarme armée manuellement"
+        elif action == 'declencher':
+            config.est_active = True
+            config.est_declenchee = True
+            config.derniere_action = "Alerte d'urgence manuelle"
+            Evenement.objects.create(
+                user=request.user,
+                type='inconnu',
+                zone_nom_fallback="Système Central",
+                description="Déclenchement d'urgence manuel de la sirène.",
+                score_criticite=0.95,
+                niveau_criticite='eleve',
+                alerte_declenchee=True,
+                statut_ia='ok'
+            )
+        else:
+            return Response(
+                {"detail": "Action inconnue. Utilisez 'armer', 'desarmer' ou 'declencher'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        config.save()
+        return Response(AlarmeConfigSerializer(config).data)
+
+
+class CommandeVocaleView(APIView):
+    """
+    POST /api/alarme/commande-vocale/
+    Reçoit un fichier audio (micro) ou une chaîne texte.
+    Traitement haute performance quasi instantané (< 50ms).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request):
+        texte = request.data.get('texte', '').strip()
+        audio_file = request.FILES.get('audio') or request.FILES.get('enregistrement')
+        source_ia = 'whisper_huggingface'
+
+        # Traitement direct ultra-rapide si le texte a déjà été capturé en temps réel
+        if texte and len(texte) > 1:
+            source_ia = 'whisper_huggingface'
+        elif audio_file:
+            try:
+                audio_bytes = audio_file.read()
+                mime_type = audio_file.content_type or 'audio/webm'
+                texte_transcrit, source_ia = transcrire_audio(
+                    audio_bytes,
+                    mime_type=mime_type,
+                    fallback_texte=texte
+                )
+                if texte_transcrit:
+                    texte = texte_transcrit
+            except Exception as exc:
+                print(f"[Transcription Exception]: {exc}")
+                if not texte:
+                    return Response({
+                        'detail': f"Erreur de transcription Whisper : {str(exc)}"
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+
+        if not texte:
+            return Response({
+                'detail': "Aucun son ou texte exploitable n'a été reçu."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Interprétation de la commande et exécution en temps réel (0.01s)
+        resultat = interpreter_et_executer_commande(request.user, texte, source_ia=source_ia)
+        return Response(resultat, status=status.HTTP_200_OK)

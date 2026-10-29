@@ -157,7 +157,7 @@ DEFAULT_FROM_EMAIL = 'Alerta Security <noreply@alerta.tn>'
 # ─── Clés API IA ─────────────────────────────────────────────────────────────
 # Lecture sécurisée depuis l'environnement ou configuration locale
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'VOTRE_CLE_GEMINI_ICI')
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.1-flash-lite')
 HUGGINGFACE_API_KEY = os.environ.get('HUGGINGFACE_API_KEY', os.environ.get('HF_TOKEN', 'VOTRE_CLE_HUGGINGFACE_ICI'))
 HF_TOKEN = HUGGINGFACE_API_KEY
 

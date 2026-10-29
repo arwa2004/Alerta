@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import serializers
 
 from . import engine, quality
-from .models import Face, KnownPerson, Zone
+from .models import Face, KnownPerson, SurveillanceVideo, Zone
 
 MIN_PHOTOS = 3
 MAX_PHOTOS = 10
@@ -178,4 +178,33 @@ class AddFacesSerializer(serializers.Serializer):
             Face.objects.create(person=person, image=up, encoding=a.encoding,
                                 quality_score=a.quality_score, image_hash=a.sha256)
             for up, a in zip(self._files, self._analyses)
+        ]
+
+
+class SurveillanceVideoSerializer(serializers.ModelSerializer):
+    zone_name = serializers.CharField(source='zone.name', read_only=True)
+    video_url = serializers.SerializerMethodField()
+    known_persons_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SurveillanceVideo
+        fields = [
+            'id', 'zone', 'zone_name', 'video_url', 'original_filename',
+            'duration_seconds', 'alert_triggered', 'known_persons_names',
+            'known_persons_details', 'known_snapshots', 'unknown_count',
+            'unknown_snapshots', 'timeline', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_video_url(self, obj):
+        request = self.context.get('request')
+        if obj.video_file:
+            url = obj.video_file.url
+            return request.build_absolute_uri(url) if request else url
+        return None
+
+    def get_known_persons_details(self, obj):
+        return [
+            {'id': p.id, 'full_name': p.full_name, 'status': p.status}
+            for p in obj.known_persons.all()
         ]

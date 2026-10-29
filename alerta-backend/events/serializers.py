@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Evenement, Zone
+from .models import Evenement, Zone, AlarmeConfig
 
 class ZoneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -73,3 +73,22 @@ class EvenementCreateSerializer(serializers.ModelSerializer):
             'score_confiance',
         ]
         read_only_fields = ['id']
+
+
+class AlarmeConfigSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model = AlarmeConfig
+        fields = [
+            'id',
+            'user',
+            'user_email',
+            'est_active',
+            'est_declenchee',
+            'derniere_commande',
+            'derniere_action',
+            'source_transcription',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'user', 'user_email', 'updated_at']

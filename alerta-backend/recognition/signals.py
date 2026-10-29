@@ -2,7 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Face, KnownPerson, Zone
+from .models import Face, KnownPerson, Zone, SurveillanceVideo
 from .services import invalidate_owner
 
 
@@ -34,3 +34,10 @@ def delete_face_file(sender, instance, **kwargs):
     """Droit à l'effacement : le fichier image disparaît avec l'enregistrement."""
     if instance.image:
         instance.image.delete(save=False)
+
+
+@receiver(post_delete, sender=SurveillanceVideo)
+def delete_video_file(sender, instance, **kwargs):
+    """Supprime physiquement le fichier vidéo dans media/ lors de la suppression."""
+    if instance.video_file:
+        instance.video_file.delete(save=False)
