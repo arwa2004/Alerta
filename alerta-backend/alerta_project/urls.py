@@ -55,6 +55,7 @@ urlpatterns = [
     path('api/recognition/', include('recognition.urls')),
     path('api/medias/', include('medias.urls')),
     path('api/', include('events.urls')),
+    path("api/authenticite/", include("authenticite.urls")),
 ]
 
 if settings.DEBUG:

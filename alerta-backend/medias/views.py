@@ -9,7 +9,8 @@ from .models import Media
 from .serializers import (AdminMediaDetailSerializer, AdminMediaSerializer,
                           MediaDetailSerializer, MediaSerializer)
 from .services.traitement import lancer_traitement
-
+from django.core.files import File
+from rest_framework import status
 
 class EstAdmin(BasePermission):
     """Réservé aux administrateurs (champ `role` d'Arwa, ou staff/superuser Django)."""
@@ -56,7 +57,30 @@ class MediaViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         media.save(update_fields=["statut", "message_erreur"])
         lancer_traitement(media.id)
         return Response(MediaSerializer(media, context={"request": request}).data)
+    
+    @action(detail=True, methods=["post"], url_path="verifier-authenticite")
+    def verifier_authenticite(self, request, pk=None):
+        """Crée (ou relance) une analyse d'authenticité à partir de ce média."""
+        from authenticite.models import AnalyseAuthenticite as A
+        from authenticite.serializers import AnalyseSerializer
+        from authenticite.services.traitement import lancer_traitement as lancer_auth
+        from authenticite.views import _relancer
 
+        media = self.get_object()            # limité aux médias de l'utilisateur
+        contexte = {"request": request}
+
+        existante = A.objects.filter(owner=request.user, media_source=media).first()
+        if existante:
+            if existante.statut == A.Statut.ERREUR:
+                _relancer(existante)
+            return Response(AnalyseSerializer(existante, context=contexte).data)
+
+        analyse = A(owner=request.user, media_source=media, nom_original=media.nom_original,
+                    type=media.type, taille=media.taille)
+        with media.fichier.open("rb") as f:
+            analyse.fichier.save(media.nom_original, File(f), save=True)
+        lancer_auth(analyse.id)
+        return Response(AnalyseSerializer(analyse, context=contexte).data, status=status.HTTP_201_CREATED)
 
 # ── API administrateur : TOUS les médias ────────────────────────────────────────
 class AdminMediaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,

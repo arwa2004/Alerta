@@ -3,8 +3,10 @@ import { zonesApi } from '../api/recognitionApi';
 import {
   listerMedias, detailMedia, televerserMedia, supprimerMedia, reanalyserMedia,
 } from '../api/medias';
+import { listerAnalyses, detailAnalyse, verifierAuthenticiteMedia } from '../api/authenticite'; // ← AUTH
+import { VERDICTS, ModaleAuthenticite } from '../components/authenticite/ResultatAuthenticite'; // ← AUTH
 
-export const STATUTS = {   // ← export ajouté
+export const STATUTS = {
   en_attente: { label: 'En attente', cls: 'bg-orange-50 text-orange-600' },
   en_cours: { label: 'Analyse en cours', cls: 'bg-[#E4F8F9] text-[#00838F]' },
   termine: { label: 'Terminé', cls: 'bg-green-50 text-green-700' },
@@ -20,19 +22,21 @@ const FILTRES = [
 
 const STATUT_PERSONNE = { authorized: 'Autorisée', watched: 'Surveillée', visitor: 'Visiteur' };
 
+const EN_COURS = ['en_attente', 'en_cours']; // ← AUTH
+
 const aplatir = (d) => {
   if (!d) return '';
   if (typeof d === 'string') return d;
   return Object.values(d).flat().map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(' ');
 };
 
-export const formaterTaille = (octets) =>   // ← export ajouté
+export const formaterTaille = (octets) =>
   octets > 1024 * 1024 ? `${(octets / (1024 * 1024)).toFixed(1)} Mo` : `${Math.max(1, Math.round(octets / 1024))} Ko`;
 
-export const formaterDate = (d) =>   // ← export ajouté
+export const formaterDate = (d) =>
   new Date(d).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-export function Tuile({ titre, valeur, couleur = 'text-[#0B1F3A]' }) {   // ← export ajouté
+export function Tuile({ titre, valeur, couleur = 'text-[#0B1F3A]' }) {
   return (
     <div className="bg-white rounded-2xl border border-[#D8DEE4] p-4">
       <p className="text-xs font-semibold text-[#4A5568] uppercase tracking-wide">{titre}</p>
@@ -52,6 +56,8 @@ export default function Medias({ onGoZones }) {
   const [survol, setSurvol] = useState(false);
   const [detail, setDetail] = useState(null);
   const [aSupprimer, setASupprimer] = useState(null);
+  const [analyses, setAnalyses] = useState([]);          // ← AUTH
+  const [detailAuth, setDetailAuth] = useState(null);    // ← AUTH
   const champFichier = useRef(null);
 
   // Zones (API du module 1)
@@ -75,12 +81,22 @@ export default function Medias({ onGoZones }) {
 
   useEffect(() => { charger(); }, [charger]);
 
-  // Rafraîchissement tant qu'un média est en cours de traitement
+  // ← AUTH : analyses d'authenticité de l'utilisateur
+  const chargerAnalyses = useCallback(() =>
+    listerAnalyses()
+      .then((r) => setAnalyses(r.data.results ?? r.data))
+      .catch(() => {}), []);
+
+  useEffect(() => { chargerAnalyses(); }, [chargerAnalyses]);
+
+  // Rafraîchissement tant qu'un média OU une vérification est en cours
+  const authEnCours = analyses.some((a) => EN_COURS.includes(a.statut)); // ← AUTH
   useEffect(() => {
-    if (!medias.some((m) => ['en_attente', 'en_cours'].includes(m.statut))) return undefined;
-    const minuterie = setInterval(charger, 3000);
+    const enCours = medias.some((m) => EN_COURS.includes(m.statut)) || authEnCours;
+    if (!enCours) return undefined;
+    const minuterie = setInterval(() => { charger(); chargerAnalyses(); }, 3000);
     return () => clearInterval(minuterie);
-  }, [medias, charger]);
+  }, [medias, authEnCours, charger, chargerAnalyses]);
 
   const envoyer = async (fichiers) => {
     if (!fichiers.length || !zoneId) return;
@@ -114,15 +130,30 @@ export default function Medias({ onGoZones }) {
 
   const relancer = (id) => reanalyserMedia(id).then(charger).catch(() => setErreur('Réanalyse impossible.'));
 
+  // ← AUTH : lancer une vérification d'authenticité / ouvrir son résultat
+  const verifier = (mediaId) => {
+    setErreur('');
+    return verifierAuthenticiteMedia(mediaId)
+      .then(chargerAnalyses)
+      .catch((err) => setErreur(aplatir(err.response?.data) || 'Vérification impossible.'));
+  };
+
+  const ouvrirAuth = (analyseId) =>
+    detailAnalyse(analyseId).then((r) => setDetailAuth(r.data)).catch(() => setErreur('Résultat indisponible.'));
+
+  // ← AUTH : une analyse par média (la plus récente)
+  const parMedia = {};
+  analyses.forEach((a) => { if (a.media_source && !parMedia[a.media_source]) parMedia[a.media_source] = a; });
+
   const visibles = medias.filter((m) => {
     if (filtre === 'tous') return true;
-    if (filtre === 'en_cours') return ['en_attente', 'en_cours'].includes(m.statut);
+    if (filtre === 'en_cours') return EN_COURS.includes(m.statut);
     return m.statut === filtre;
   });
 
   const nbAlertes = medias.filter((m) => m.alerte).length;
   const nbVisages = medias.reduce((n, m) => n + (m.nb_visages || 0), 0);
-  const nbEnCours = medias.filter((m) => ['en_attente', 'en_cours'].includes(m.statut)).length;
+  const nbEnCours = medias.filter((m) => EN_COURS.includes(m.statut)).length;
 
   // ── Aucune zone ────────────────────────────────────────────────────────────
   if (!chargement && zones.length === 0) {
@@ -215,6 +246,9 @@ export default function Medias({ onGoZones }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {visibles.map((m) => {
             const s = STATUTS[m.statut];
+            const auth = parMedia[m.id];                                             // ← AUTH
+            const va = auth && VERDICTS[auth.verdict];                               // ← AUTH
+            const authAttente = auth && EN_COURS.includes(auth.statut);              // ← AUTH
             return (
               <div key={m.id} className="bg-white rounded-3xl border border-[#D8DEE4] shadow-sm hover:shadow-lg transition overflow-hidden flex flex-col">
                 <div className="relative h-44 bg-[#0B1F3A]">
@@ -241,13 +275,17 @@ export default function Medias({ onGoZones }) {
 
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.cls}`}>
-                      {['en_attente', 'en_cours'].includes(m.statut) && (
+                      {EN_COURS.includes(m.statut) && (
                         <span className="inline-block w-2 h-2 rounded-full bg-current animate-pulse mr-1.5" />
                       )}
                       {s.label}
                     </span>
                     {m.statut === 'termine' && (
                       <span className="text-xs font-semibold text-[#4A5568]">{m.nb_visages} visage(s)</span>
+                    )}
+                    {/* ← AUTH : verdict d'authenticité */}
+                    {auth?.statut === 'termine' && va && (
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${va.cls}`}>{va.label}</span>
                     )}
                   </div>
 
@@ -271,6 +309,32 @@ export default function Medias({ onGoZones }) {
                       Supprimer
                     </button>
                   </div>
+
+                  {/* ← AUTH : bouton d'authenticité */}
+                  {!auth && (
+                    <button type="button" onClick={() => verifier(m.id)}
+                      className="w-full py-2 rounded-xl border border-[#00C2CB] text-[#00838F] hover:bg-[#E4F8F9] text-xs font-bold cursor-pointer transition">
+                      Vérifier l'authenticité
+                    </button>
+                  )}
+                  {authAttente && (
+                    <button type="button" disabled
+                      className="w-full py-2 rounded-xl bg-[#E4F8F9] text-[#00838F] text-xs font-bold opacity-70 cursor-wait">
+                      Vérification en cours…
+                    </button>
+                  )}
+                  {auth?.statut === 'termine' && (
+                    <button type="button" onClick={() => ouvrirAuth(auth.id)}
+                      className="w-full py-2 rounded-xl border border-[#00C2CB] text-[#00838F] hover:bg-[#E4F8F9] text-xs font-bold cursor-pointer transition">
+                      Voir l'authenticité · score {Math.round(auth.score)}/100
+                    </button>
+                  )}
+                  {auth?.statut === 'erreur' && (
+                    <button type="button" onClick={() => verifier(m.id)}
+                      className="w-full py-2 rounded-xl border border-red-200 text-[#E63946] hover:bg-red-50 text-xs font-bold cursor-pointer transition">
+                      Vérification échouée : réessayer
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -300,11 +364,14 @@ export default function Medias({ onGoZones }) {
 
       {/* ── Modale des résultats ── */}
       {detail && <ModaleResultats media={detail} onClose={() => setDetail(null)} />}
+
+      {/* ← AUTH : modale d'authenticité */}
+      {detailAuth && <ModaleAuthenticite analyse={detailAuth} onClose={() => setDetailAuth(null)} />}
     </div>
   );
 }
 
-export function ModaleResultats({ media, onClose }) {   // ← export ajouté
+export function ModaleResultats({ media, onClose }) {
   const r = media.resultats || {};
   const connus = r.known_snapshots || [];
   const inconnus = r.unknown_snapshots || [];
@@ -396,7 +463,7 @@ export function ModaleResultats({ media, onClose }) {   // ← export ajouté
           )}
 
           {r.total_detections === 0 && (
-            <p className="text-sm text-[#4A5568]">Aucun media détecté dans ce média.</p>
+            <p className="text-sm text-[#4A5568]">Aucun visage détecté dans ce média.</p>
           )}
         </div>
       </div>

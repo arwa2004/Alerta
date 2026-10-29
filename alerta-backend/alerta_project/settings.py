@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'recognition',
     'medias',
     'events',
+    "authenticite",
 ]
 
 MIDDLEWARE = [
@@ -191,3 +192,6 @@ PLANNER_RENDER_DPI = int(os.environ.get('PLANNER_RENDER_DPI', '150'))
 PLANNER_MAX_RENDER_PIXELS = int(os.environ.get('PLANNER_MAX_RENDER_PIXELS', '4000'))  # plus grand côté
 # Seuil de netteté minimale pour l'enrôlement biométrique (adapté vidéosurveillance)
 RECOGNITION_MIN_SHARPNESS = 2.0
+
+AUTH_MODELE_IA = "umm-maybe/AI-image-detector"   # modèle Hugging Face (à vérifier, voir étape 7)
+AUTH_NB_IMAGES_VIDEO = 12                         # images analysées par vidéo
