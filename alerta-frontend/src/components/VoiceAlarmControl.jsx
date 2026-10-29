@@ -63,7 +63,7 @@ const speakFeedback = (text) => {
   }
 };
 
-export default function VoiceAlarmControl({ onAlarmChange }) {
+export default function VoiceAlarmControl({ onAlarmChange, showTextAlways = false, className = "" }) {
   const [alarmState, setAlarmState] = useState({
     est_active: true,
     est_declenchee: false,
@@ -288,7 +288,7 @@ export default function VoiceAlarmControl({ onAlarmChange }) {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setModalOpen(true)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-xs ${className} ${
             alarmState.est_declenchee
               ? 'bg-rose-500/20 text-rose-300 border-rose-500 animate-pulse'
               : alarmState.est_active
@@ -306,7 +306,7 @@ export default function VoiceAlarmControl({ onAlarmChange }) {
                 : 'bg-slate-400'
             }`}
           />
-          <span className="hidden md:inline">
+          <span className={showTextAlways ? "inline" : "hidden md:inline"}>
             {alarmState.est_declenchee
               ? 'Sirène Active !'
               : alarmState.est_active
@@ -328,7 +328,7 @@ export default function VoiceAlarmControl({ onAlarmChange }) {
 
       {/* ── MODALE INTERACTIVE COMMANDE VOCALE (MODULE 4) ── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
             {/* Header */}
             <div className="px-6 py-4 bg-gradient-to-r from-[#0B1F3A] to-[#122b52] text-white flex items-center justify-between">

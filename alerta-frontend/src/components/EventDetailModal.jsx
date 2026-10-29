@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import eventsApi from '../api/eventsApi';
+import VoiceAlarmControl from './VoiceAlarmControl';
 
 export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   if (!event) return null;
@@ -507,50 +508,44 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
             </div>
           </div>
 
-          {/* ── SECTION DÉCLENCHEMENT MODULE 4 (VOIX & ALARME) AVEC CONTRÔLE INTERACTIF ACCÉLÉRÉ ── */}
-          {event.alerte_declenchee && !isAlarmSilenced && (
-            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-pulse">
-              <div className="flex items-center gap-3">
-                <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400 font-bold text-sm">M4</span>
-                <div>
-                  <p className="font-bold text-rose-100">Alerte synchronisée avec le Module 4 (Voix &amp; Alarme)</p>
-                  <p className="text-slate-400 text-[11px]">Sirène active et diffusion d'un avertissement prioritaire.</p>
-                  {voiceFeedback && (
-                    <p className="text-[11px] text-cyan-300 font-semibold mt-1">🎙️ {voiceFeedback}</p>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleVoiceDisarmModal}
-                disabled={isVoiceRecording}
-                className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 transition cursor-pointer text-xs flex-shrink-0 shadow-sm ${
-                  isVoiceRecording
-                    ? 'bg-rose-600 text-white animate-bounce'
-                    : 'bg-white/10 hover:bg-white/20 text-white border border-rose-400/40 hover:border-rose-400'
-                }`}
-                title="Dites « désactiver l'alarme » pour couper la sirène"
-              >
-                <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                <span>{isVoiceRecording ? 'Écoute...' : 'Couper par la voix (Whisper)'}</span>
-              </button>
-            </div>
-          )}
-
-          {isAlarmSilenced && (
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs shadow-md">
-              <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 font-bold text-sm">✔</span>
+          {/* ── SECTION DÉCLENCHEMENT MODULE 4 (VOIX & ALARME) — MÊME COMPOSANT QUE DANS LE NAVBAR ── */}
+          <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+            <div className="flex items-center gap-3">
+              <span className={`p-2 rounded-xl font-bold text-sm ${
+                event.alerte_declenchee && !isAlarmSilenced
+                  ? 'bg-rose-500/20 text-rose-400'
+                  : 'bg-cyan-500/20 text-cyan-400'
+              }`}>
+                M4
+              </span>
               <div>
-                <p className="font-bold text-emerald-100">Alarme désactivée (Module 4)</p>
-                <p className="text-slate-400 text-[11px]">La sirène a été coupée et le système est repassé en veille sécurisée.</p>
+                <p className="font-bold text-slate-100">Alerte synchronisée avec le Module 4 (Voix &amp; Alarme)</p>
+                <p className="text-slate-400 text-[11px]">
+                  {event.alerte_declenchee && !isAlarmSilenced
+                    ? "Sirène active et diffusion d'un avertissement prioritaire."
+                    : "Contrôle vocal Whisper et gestion en temps réel de l'alarme."}
+                </p>
                 {voiceFeedback && (
-                  <p className="text-[11px] text-emerald-400 italic mt-0.5">{voiceFeedback}</p>
+                  <p className="text-[11px] text-cyan-300 font-semibold mt-1">🎙️ {voiceFeedback}</p>
                 )}
               </div>
             </div>
-          )}
+
+            {/* Même composant exact que dans la Navbar */}
+            <div className="flex-shrink-0">
+              <VoiceAlarmControl
+                showTextAlways={true}
+                onAlarmChange={(status) => {
+                  if (!status.est_declenchee) {
+                    setIsAlarmSilenced(true);
+                  }
+                  if (onEventUpdated) {
+                    onEventUpdated();
+                  }
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Pied de page */}
