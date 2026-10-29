@@ -452,7 +452,7 @@ export default function AdminEvents() {
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onEventUpdated={(updated) => {
-            setSelectedEvent(updated);
+            if (updated) setSelectedEvent(updated);
             fetchEvents();
             fetchStats();
           }}

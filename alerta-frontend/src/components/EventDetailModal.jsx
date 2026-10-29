@@ -29,8 +29,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
   const [currentImageSource, setCurrentImageSource] = useState(event.image_source || 'simulation');
   const [errorMsg, setErrorMsg] = useState('');
   const [isAlarmSilenced, setIsAlarmSilenced] = useState(false);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const [voiceFeedback, setVoiceFeedback] = useState('');
 
   // Synchronisation dynamique si les props de l'événement changent
   useEffect(() => {
@@ -141,88 +139,6 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
       setErrorMsg("Erreur lors de la génération. L'image précédente est conservée.");
     } finally {
       setIsGeneratingImage(false);
-    }
-  };
-
-  // Couper l'alarme via commande vocale Whisper (Module 4) - Mode accéléré (< 100ms)
-  const handleVoiceDisarmModal = async () => {
-    setIsVoiceRecording(true);
-    setVoiceFeedback('Écoute active... Dites « désactiver l’alarme »');
-
-    let speechText = '';
-    let rec = null;
-    let silenceTimer = null;
-
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      try {
-        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        rec = new SpeechRec();
-        rec.lang = 'fr-FR';
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (evt) => {
-          let t = '';
-          for (let i = 0; i < evt.results.length; i++) t += evt.results[i][0].transcript;
-          speechText = t;
-          if (silenceTimer) clearTimeout(silenceTimer);
-          silenceTimer = setTimeout(() => {
-            if (rec) rec.stop();
-          }, 80);
-        };
-        rec.onspeechend = () => {
-          if (silenceTimer) clearTimeout(silenceTimer);
-          silenceTimer = setTimeout(() => {
-            if (rec) rec.stop();
-          }, 60);
-        };
-        rec.start();
-      } catch (e) {
-        console.debug(e);
-      }
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        try {
-          const res = await eventsApi.envoyerCommandeVocale(speechText || blob);
-          setVoiceFeedback(`« ${res.transcription} » → ${res.action_label}`);
-          if (res.action === 'alarme_desactivee' || res.action === 'statut_consulte') {
-            setIsAlarmSilenced(true);
-            if (window.speechSynthesis && res.message_vocal) {
-              const u = new SpeechSynthesisUtterance(res.message_vocal);
-              u.lang = 'fr-FR';
-              u.rate = 1.2;
-              window.speechSynthesis.speak(u);
-            }
-            if (onEventUpdated) onEventUpdated();
-          }
-        } catch (err) {
-          await eventsApi.setAlarmeAction('desarmer');
-          setIsAlarmSilenced(true);
-          setVoiceFeedback('Alarme coupée.');
-          if (onEventUpdated) onEventUpdated();
-        } finally {
-          setIsVoiceRecording(false);
-        }
-      };
-      recorder.start();
-      setTimeout(() => {
-        if (recorder.state === 'recording') recorder.stop();
-      }, 2200);
-    } catch (e) {
-      await eventsApi.setAlarmeAction('desarmer');
-      setIsAlarmSilenced(true);
-      setVoiceFeedback('Alarme coupée.');
-      setIsVoiceRecording(false);
-      if (onEventUpdated) onEventUpdated();
     }
   };
 
@@ -525,9 +441,7 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
                     ? "Sirène active et diffusion d'un avertissement prioritaire."
                     : "Contrôle vocal Whisper et gestion en temps réel de l'alarme."}
                 </p>
-                {voiceFeedback && (
-                  <p className="text-[11px] text-cyan-300 font-semibold mt-1">🎙️ {voiceFeedback}</p>
-                )}
+
               </div>
             </div>
 
@@ -536,11 +450,8 @@ export default function EventDetailModal({ event, onClose, onEventUpdated }) {
               <VoiceAlarmControl
                 showTextAlways={true}
                 onAlarmChange={(status) => {
-                  if (!status.est_declenchee) {
+                  if (status && !status.est_declenchee) {
                     setIsAlarmSilenced(true);
-                  }
-                  if (onEventUpdated) {
-                    onEventUpdated();
                   }
                 }}
               />
