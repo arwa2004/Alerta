@@ -102,7 +102,6 @@ export default function Navbar({ activeTab = 'accueil', setActiveTab }) {
                 : 'text-[#B8C7D9] hover:bg-white/10 hover:text-white'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             <span>Événements</span>
           </button>
 
