@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { zonesApi, extractError } from '../../api/recognitionApi';
 import { Banner, EmptyState } from './ui';
 import { STATUS, inputCls, labelCls, primaryBtn } from './styles';
+import UnknownTrackerModal from './UnknownTrackerModal';
 
 export default function TestPanel({ zones }) {
   const [zoneId, setZoneId] = useState('');
@@ -11,6 +12,7 @@ export default function TestPanel({ zones }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressStage, setProgressStage] = useState('');
+  const [trackingUnknown, setTrackingUnknown] = useState(null);
 
   const currentZone = zoneId || (zones[0] ? String(zones[0].id) : '');
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -21,31 +23,41 @@ export default function TestPanel({ zones }) {
   useEffect(() => {
     let interval;
     if (loading) {
-      setProgress(10);
+      setProgress(5);
       setProgressStage(isVideo ? 'Initialisation et découpage des flux vidéo...' : 'Chargement du modèle biométrique...');
       interval = setInterval(() => {
         setProgress((prev) => {
-          if (prev < 30) {
+          // Simulation progressive qui ralentit au fur et à mesure
+          // Ne dépasse jamais 95% — les 5% restants sont réservés à la fin du traitement serveur
+          if (prev < 20) {
             setProgressStage(isVideo ? 'Extraction des images et normalisation...' : 'Localisation des visages...');
-            return prev + (isVideo ? 4 : 8);
+            return Math.min(20, prev + (isVideo ? 3 : 7));
           }
-          if (prev < 65) {
-            setProgressStage(isVideo ? 'Localisation IA des visages (multi-échelle)...' : 'Calcul des descripteurs 128D...');
-            return prev + (isVideo ? 2.5 : 5);
+          if (prev < 50) {
+            setProgressStage(isVideo ? 'Localisation IA des visages (multi-échelle, upsample×2)...' : 'Calcul des descripteurs 128D...');
+            return Math.min(50, prev + (isVideo ? 1.2 : 4));
           }
-          if (prev < 88) {
-            setProgressStage('Comparaison biométrique avec les personnes de la zone...');
-            return prev + (isVideo ? 1.5 : 3);
+          if (prev < 75) {
+            setProgressStage('Comparaison biométrique avec les personnes connues de la zone...');
+            return Math.min(75, prev + (isVideo ? 0.7 : 2));
           }
-          if (prev < 96) {
+          if (prev < 90) {
             setProgressStage('Regroupement des individus et sélection des meilleures captures...');
-            return prev + 0.5;
+            return Math.min(90, prev + (isVideo ? 0.3 : 1));
           }
+          if (prev < 95) {
+            setProgressStage('Finalisation du rapport et compression des vignettes...');
+            return Math.min(95, prev + 0.15);
+          }
+          // On reste bloqué à 95% jusqu'à ce que le serveur réponde réellement
+          setProgressStage('En attente de la réponse du serveur...');
           return prev;
         });
-      }, 400);
+      }, 500);
     } else {
+      // La réponse est arrivée → on passe directement à 100%
       setProgress(100);
+      setProgressStage('Analyse terminée !');
     }
     return () => clearInterval(interval);
   }, [loading, isVideo]);
@@ -126,22 +138,27 @@ export default function TestPanel({ zones }) {
         {loading && (
           <div className="bg-white rounded-3xl border border-[#D8DEE4] p-6 text-center space-y-4 shadow-sm">
             <div className="flex items-center justify-center gap-3">
-              <span className="text-3xl animate-bounce">🤖</span>
-              <span className="text-3xl font-black text-[#00838F]">{Math.min(99, Math.round(progress))}%</span>
+              <span className="text-3xl">🤖</span>
+              <span className="text-3xl font-black text-[#00838F]">{Math.round(progress)}%</span>
             </div>
             <div>
-              <p className="font-bold text-[#0B1F3A] text-sm">{progressStage || "Traitement de l'intelligence artificielle..."}</p>
+              <p className="font-bold text-[#0B1F3A] text-sm">{progressStage}</p>
               <p className="text-xs text-[#4A5568] mt-1">
                 {isVideo ? 'Extraction des images, localisation multi-échelle des visages et comparaison biométrique.' : 'Localisation du visage et calcul des descripteurs biométriques.'}
               </p>
             </div>
             {/* Barre de progression avec pourcentage */}
-            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden p-0.5 border border-gray-200">
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200">
               <div
-                className="bg-gradient-to-r from-[#00838F] to-[#2BB673] h-full rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round(progress))}%` }}
+                className="bg-gradient-to-r from-[#00838F] to-[#2BB673] h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.round(progress)}%` }}
               />
             </div>
+            {progress >= 95 && (
+              <p className="text-[11px] text-orange-500 font-medium animate-pulse">
+                ⏳ Traitement vidéo en cours côté serveur, cela peut prendre 1–2 min...
+              </p>
+            )}
           </div>
         )}
 
@@ -164,6 +181,26 @@ export default function TestPanel({ zones }) {
                   <p className="text-base">Zone sécurisée</p>
                   <p className="text-xs font-normal text-[#1D8A57]">Seules des personnes autorisées ont été détectées.</p>
                 </div>
+              </div>
+            )}
+
+            {/* Notification de sauvegarde dans Media */}
+            {result.saved && (
+              <div className="bg-[#E4F8F9] border border-[#00838F]/30 rounded-2xl p-3 text-xs text-[#00838F] font-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span>💾</span>
+                  <span>Vidéo enregistrée dans <code>media/</code> avec les personnes connues et inconnues.</span>
+                </div>
+                {result.video_url && (
+                  <a
+                    href={result.video_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold underline hover:text-[#0B1F3A]"
+                  >
+                    Visionner le fichier
+                  </a>
+                )}
               </div>
             )}
 
@@ -218,12 +255,28 @@ export default function TestPanel({ zones }) {
                   <h4 className="text-xs font-bold uppercase tracking-wider text-[#C22B36] flex items-center gap-2">
                     <span>📸</span> {result.unknown_snapshots.length} personne{result.unknown_snapshots.length > 1 ? 's' : ''} inconnue{result.unknown_snapshots.length > 1 ? 's' : ''} distincte{result.unknown_snapshots.length > 1 ? 's' : ''}
                   </h4>
-                  <span className="text-[11px] text-gray-500 font-medium">Meilleures captures sélectionnées</span>
+                  <span className="text-[10px] text-gray-500 font-medium">💡 Cliquez sur un visage pour le traquer</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                   {result.unknown_snapshots.map((snap, idx) => (
-                    <div key={idx} className="text-center group bg-gray-50 rounded-xl p-2 border border-gray-200 hover:border-red-400 transition-colors">
-                      <img src={snap.thumbnail} alt={`Inconnu ${idx + 1}`} className="w-full aspect-square object-cover rounded-lg border border-red-300 shadow-sm" />
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setTrackingUnknown({
+                        ...snap,
+                        video_id: result.video_id,
+                        zone_name: zones.find(z => String(z.id) === String(currentZone))?.name,
+                        unknown_index: idx,
+                      })}
+                      title="Cliquer pour chercher cet inconnu dans toutes les vidéos de toutes les zones"
+                      className="text-center group bg-gray-50 hover:bg-red-50 rounded-xl p-2 border border-gray-200 hover:border-red-400 transition-all cursor-pointer shadow-xs hover:shadow-md"
+                    >
+                      <div className="relative">
+                        <img src={snap.thumbnail} alt={`Inconnu ${idx + 1}`} className="w-full aspect-square object-cover rounded-lg border border-red-300 shadow-sm group-hover:scale-105 transition-transform bg-black" />
+                        <span className="absolute bottom-1 right-1 bg-black/70 text-white rounded-full p-1 text-[9px] group-hover:bg-red-600 transition-colors">
+                          🔍
+                        </span>
+                      </div>
                       <div className="mt-1.5 space-y-0.5">
                         <span className="text-[11px] font-bold text-gray-800 block">Inconnu #{idx + 1}</span>
                         <span className="text-[10px] text-gray-500 font-mono block">
@@ -234,8 +287,11 @@ export default function TestPanel({ zones }) {
                             vu {snap.count} frames
                           </span>
                         )}
+                        <span className="block text-[9px] text-red-600 font-bold mt-1 underline">
+                          Traquer ➔
+                        </span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -311,6 +367,14 @@ export default function TestPanel({ zones }) {
           </div>
         )}
       </div>
+
+      {/* Modal de traque d'inconnu inter-zones */}
+      {trackingUnknown && (
+        <UnknownTrackerModal
+          target={trackingUnknown}
+          onClose={() => setTrackingUnknown(null)}
+        />
+      )}
     </div>
   );
 }

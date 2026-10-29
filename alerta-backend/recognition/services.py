@@ -138,7 +138,7 @@ def identify_all_faces(zone: Zone, image_bytes: bytes):
     ]
 
 
-def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
+def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 1.0):
     """Analyse une vidéo frame par frame, détecte les visages, identifie les personnes
     connues selon les règles de la zone et regroupe intelligemment les personnes inconnues.
     Chaque personne inconnue unique n'apparaît qu'une seule fois avec sa meilleure vignette.
@@ -166,6 +166,9 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
     MAX_UNKNOWN_SNAPSHOTS = 20
     alert_triggered = False
 
+    # Résolution maximale pour l'analyse — réduit le temps de locate_faces sur les vidéos HD
+    MAX_ANALYSIS_WIDTH = 640
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -175,18 +178,36 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
             time_sec = round(frame_idx / video_fps, 1)
             time_str = f"{int(time_sec // 60):02d}:{int(time_sec % 60):02d}"
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            locations = engine.locate_faces(rgb_frame)
+            # Réduire la résolution pour accélérer la détection
+            h_orig, w_orig = frame.shape[:2]
+            if w_orig > MAX_ANALYSIS_WIDTH:
+                scale = MAX_ANALYSIS_WIDTH / w_orig
+                small_frame = cv2.resize(frame, (MAX_ANALYSIS_WIDTH, int(h_orig * scale)))
+            else:
+                scale = 1.0
+                small_frame = frame
+
+            rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            locations_small = engine.locate_faces(rgb_frame)
+
+            # Remettre les coordonnées à l'échelle originale pour le crop de vignette
+            if scale != 1.0:
+                locations = [(int(t/scale), int(r/scale), int(b/scale), int(l/scale))
+                             for t, r, b, l in locations_small]
+            else:
+                locations = locations_small
 
             frame_faces = []
             h, w = frame.shape[:2]
 
-            for loc in locations:
-                enc = engine.encode_face(rgb_frame, loc)
+            for loc_small, loc_orig in zip(locations_small, locations):
+                # Encodage sur la petite frame (cohérent avec les coordonnées loc_small)
+                enc = engine.encode_face(rgb_frame, loc_small)
                 match = identify_encoding(zone, enc)
-                top, right, bottom, left = loc
+                # Coordonnées originales (HD) pour la box et les crops de vignettes
+                top, right, bottom, left = loc_orig
 
-                # Créer une vignette base64 du visage détecté avec une marge
+                # Créer une vignette base64 du visage détecté avec une marge (sur frame HD originale)
                 pad_y = int((bottom - top) * 0.25)
                 pad_x = int((right - left) * 0.25)
                 crop = frame[max(0, top-pad_y):min(h, bottom+pad_y), max(0, left-pad_x):min(w, right+pad_x)]
@@ -218,20 +239,25 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
                         enc_arr = np.asarray(enc, dtype=float)
                         area = (bottom - top) * (right - left)
 
-                        # Trouver le groupe le plus proche
+                        # Trouver le groupe le plus proche (vectorisé pour plus de rapidité)
                         matched_cluster = None
                         min_dist = float('inf')
-                        for c in unknown_clusters:
-                            d = min(float(np.linalg.norm(enc_arr - e)) for e in c['encodings'])
-                            if d < min_dist:
-                                min_dist = d
-                                matched_cluster = c
+                        if unknown_clusters:
+                            # Comparer avec le centroïde moyen de chaque cluster
+                            for c in unknown_clusters:
+                                centroid = c.get('centroid', c['encodings'][0])
+                                d = float(np.linalg.norm(enc_arr - centroid))
+                                if d < min_dist:
+                                    min_dist = d
+                                    matched_cluster = c
 
                         if matched_cluster is not None and min_dist < DEDUP_THRESHOLD:
                             # Même personne inconnue qui continue d'apparaître
                             matched_cluster['encodings'].append(enc_arr)
                             if len(matched_cluster['encodings']) > 8:
                                 matched_cluster['encodings'] = matched_cluster['encodings'][-8:]
+                            # Mise à jour du centroïde
+                            matched_cluster['centroid'] = np.mean(matched_cluster['encodings'], axis=0)
                             matched_cluster['count'] += 1
                             matched_cluster['last_seen'] = time_str
                             # Conserver la meilleure capture (la plus grande et nette)
@@ -244,6 +270,7 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
                             # Nouvelle personne inconnue distincte
                             unknown_clusters.append({
                                 'encodings': [enc_arr],
+                                'centroid': enc_arr.copy(),
                                 'best_area': area,
                                 'thumbnail': thumb_b64,
                                 'timestamp': time_str,
@@ -288,6 +315,7 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
             'first_seen': c['first_seen'],
             'last_seen': c['last_seen'],
             'count': c['count'],
+            'encoding': [float(x) for x in np.mean(c['encodings'], axis=0)] if c.get('encodings') else None,
         }
         for c in unknown_clusters
     ]
@@ -315,4 +343,146 @@ def identify_video_faces(zone: Zone, video_path: str, sample_fps: float = 2.0):
         'known_snapshots': known_snapshots,
         'known_persons': list(known_persons),
         'timeline': timeline,
+    }
+
+
+def extract_snapshot_encoding(snapshot: dict):
+    """Extrait ou calcule l'encodage 128D d'un instantané de visage."""
+    if not snapshot:
+        return None
+    if 'encoding' in snapshot and snapshot['encoding']:
+        return np.asarray(snapshot['encoding'], dtype=float)
+    if 'thumbnail' in snapshot and snapshot['thumbnail']:
+        import base64
+        try:
+            raw = snapshot['thumbnail']
+            if ',' in raw:
+                raw = raw.split(',', 1)[1]
+            img_bytes = base64.b64decode(raw)
+            arr = quality.load_rgb_array(img_bytes)
+            locs = engine.locate_faces(arr)
+            if locs:
+                return engine.encode_face(arr, locs[0])
+        except Exception:
+            return None
+    return None
+
+
+def search_unknown_across_videos(user, video_id: int = None, unknown_index: int = None,
+                                 thumbnail: str = None, threshold: float = 0.50):
+    """Recherche les apparitions d'un individu inconnu dans toutes les vidéos de toutes les zones."""
+    from .models import Face, KnownPerson, SurveillanceVideo
+
+    target_encoding = None
+    target_meta = {}
+
+    if video_id is not None and unknown_index is not None:
+        target_video = SurveillanceVideo.objects.filter(id=video_id, uploaded_by=user).select_related('zone').first()
+        if not target_video:
+            raise ValueError("Vidéo source introuvable.")
+        snaps = target_video.unknown_snapshots or []
+        if unknown_index < 0 or unknown_index >= len(snaps):
+            raise ValueError("Indice d'inconnu introuvable dans cette vidéo.")
+        target_snap = snaps[unknown_index]
+        target_encoding = extract_snapshot_encoding(target_snap)
+        target_meta = {
+            'video_id': target_video.id,
+            'zone_id': target_video.zone_id,
+            'zone_name': target_video.zone.name,
+            'unknown_index': unknown_index,
+            'thumbnail': target_snap.get('thumbnail'),
+            'timestamp': target_snap.get('timestamp'),
+            'first_seen': target_snap.get('first_seen'),
+            'last_seen': target_snap.get('last_seen'),
+            'created_at': target_video.created_at.isoformat(),
+        }
+    elif thumbnail:
+        import base64
+        try:
+            raw = thumbnail.split(',', 1)[1] if ',' in thumbnail else thumbnail
+            img_bytes = base64.b64decode(raw)
+            arr = quality.load_rgb_array(img_bytes)
+            locs = engine.locate_faces(arr)
+            if not locs:
+                raise ValueError("Aucun visage détecté sur l'image.")
+            target_encoding = engine.encode_face(arr, locs[0])
+            target_meta = {
+                'video_id': None,
+                'thumbnail': thumbnail,
+            }
+        except Exception as e:
+            raise ValueError(f"Image invalide : {e}")
+    else:
+        raise ValueError("Spécifiez un identifiant de vidéo et un indice de visage, ou une image.")
+
+    if target_encoding is None:
+        raise ValueError("Impossible d'extraire la signature biométrique de ce visage.")
+
+    # 1. Parcourir toutes les vidéos de l'utilisateur sur l'ensemble de ses zones
+    all_videos = (SurveillanceVideo.objects.filter(uploaded_by=user)
+                  .select_related('zone')
+                  .order_by('-created_at'))
+
+    matches = []
+
+    for vid in all_videos:
+        vid_snaps = vid.unknown_snapshots or []
+        for idx, other_snap in enumerate(vid_snaps):
+            # Ne pas comparer le visage à lui-même dans la même vidéo
+            if target_meta.get('video_id') == vid.id and idx == unknown_index:
+                continue
+
+            other_encoding = extract_snapshot_encoding(other_snap)
+            if other_encoding is None:
+                continue
+
+            dist = float(np.linalg.norm(target_encoding - other_encoding))
+            if dist <= threshold:
+                confidence = distance_to_confidence(dist, threshold)
+                sim_pct = round(max(0.0, min(100.0, (1.0 - (dist / threshold)) * 100)), 1)
+                matches.append({
+                    'video_id': vid.id,
+                    'zone_id': vid.zone_id,
+                    'zone_name': vid.zone.name,
+                    'video_url': vid.video_file.url if vid.video_file else None,
+                    'original_filename': vid.original_filename,
+                    'created_at': vid.created_at.isoformat(),
+                    'unknown_index': idx,
+                    'distance': round(dist, 4),
+                    'confidence': confidence,
+                    'similarity_percent': sim_pct,
+                    'snapshot': other_snap,
+                })
+
+    # Trier par plus grande similarité (distance la plus faible)
+    matches.sort(key=lambda m: m['distance'])
+
+    # 2. Vérification de correspondance avec une personne connue enregistrée
+    known_person_match = None
+    all_known_faces = Face.objects.filter(person__owner=user, person__consent=True).select_related('person')
+    best_known_dist = float('inf')
+    best_known_person = None
+
+    for kf in all_known_faces:
+        kd = float(np.linalg.norm(target_encoding - np.asarray(kf.encoding, dtype=float)))
+        if kd < best_known_dist:
+            best_known_dist = kd
+            best_known_person = kf.person
+
+    if best_known_person and best_known_dist <= threshold:
+        known_person_match = {
+            'person_id': best_known_person.id,
+            'full_name': best_known_person.full_name,
+            'status': best_known_person.status,
+            'distance': round(best_known_dist, 4),
+            'confidence': distance_to_confidence(best_known_dist, threshold),
+        }
+
+    return {
+        'target': target_meta,
+        'threshold_used': threshold,
+        'total_videos_analyzed': all_videos.count(),
+        'matches_count': len(matches),
+        'matches': matches,
+        'known_person_match': known_person_match,
     }

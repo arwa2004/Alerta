@@ -3,12 +3,14 @@ import { zonesApi, extractError } from '../../api/recognitionApi';
 import ZonesPanel from './ZonesPanel';
 import PersonsPanel from './PersonsPanel';
 import TestPanel from './TestPanel';
+import VideosPanel from './VideosPanel';
 import { Banner } from './ui';
 
 const TABS = [
   { id: 'zones', label: 'Zones' },
   { id: 'persons', label: 'Personnes connues' },
   { id: 'test', label: 'Tester la reconnaissance' },
+  { id: 'videos', label: 'Vidéos enregistrées' },
 ];
 
 export default function RecognitionModule() {
@@ -54,6 +56,7 @@ export default function RecognitionModule() {
       {tab === 'zones' && <ZonesPanel zones={zones} loading={loading} onChanged={loadZones} />}
       {tab === 'persons' && <PersonsPanel zones={zones} onChanged={loadZones} />}
       {tab === 'test' && <TestPanel zones={zones} />}
+      {tab === 'videos' && <VideosPanel zones={zones} />}
     </div>
   );
 }
